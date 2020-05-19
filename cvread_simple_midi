@@ -15,18 +15,24 @@ int pad1= A3;
 int baudRate= 115200;
 
 // Midi Note On / Off
-byte noteOn= 144; 
-byte noteOff= 128;
+byte midiChannel = 0 ; // 0-15 for 1 to 16
+
+byte noteOn= 144 + midiChannel; 
+byte noteOff= 128 + midiChannel;
+
+byte midiKey= 38;
 
 // Dead Times for AD sampling
-int del= 50;
+int del1= 50;
 int del2= 50;
 
 // Calibration AD to MIDI, with Low Cut
-float AR= 1024.;
-float MR= 128.;
-float CO= 120.;
-float CG= ( (MR-1) / ( (AR-1 ) - CO ));
+float AR= 1024.;	// Analog Digital Amplitude Resolution
+float MR= 128.;		// Midi Amplitude Resolution
+	
+float CO= 120.;		// Calibration Offset: Low Cut on Anlog Sample Amplitude
+	
+float CG= ( (MR-1) / ( (AR-1 ) - CO )); // Calibration Gradient
 
 // Variables for IN and OUT
 int readVal;
@@ -57,10 +63,10 @@ void loop()
    // disregard negative Values (due to Low Cut Filter CO=120)
    if (midiVal>0)
    {
-        MIDImessage (noteOn, 38, midiVal);   // turn note on
-        delay(del);
+        MIDImessage (noteOn, midiKey, midiVal);   // turn note on
+        delay(del1);
 
-	MIDImessage (noteOff, 38, 0);     // turn note off
+	MIDImessage (noteOff, midiKey, 0);     // turn note off
 	delay(del2);  
    }
 }
