@@ -29,9 +29,9 @@ int del2= 50;
 // Calibration AD to MIDI, with Low Cut
 float AR= 1024.;	// Analog Digital Amplitude Resolution
 float MR= 128.;		// Midi Amplitude Resolution
-	
+
 float CO= 120.;		// Calibration Offset: Low Cut on Anlog Sample Amplitude
-	
+
 float CG= ( (MR-1) / ( (AR-1 ) - CO )); // Calibration Gradient
 
 // Variables for IN and OUT
@@ -46,14 +46,14 @@ void MIDImessage(byte command, byte data1, byte data2)
     Serial.write(data2);
 }
 
-// Arduino SETUP	
+// Arduino SETUP
 void setup()
 {
     Serial.begin(baudRate);
     pinMode(pad1, INPUT);
 }
 
-// Arduino MAIN LOOP	
+// Arduino MAIN LOOP
 void loop()
 {
     // get Analog reading, calibrate to Midi Value
@@ -66,7 +66,7 @@ void loop()
         MIDImessage (noteOn, midiKey, midiVal);   // turn note on
         delay(del1);
 
-	MIDImessage (noteOff, midiKey, 0);     // turn note off
-	delay(del2);  
+        MIDImessage (noteOff, midiKey, 0);     // turn note off
+        delay(del2);  
    }
 }
