@@ -1,47 +1,66 @@
-int pad1= A3;
-int midiVal; 
-int readVal= 0;
+/* CD to Piezeo to Midi
+ *
+ * by: sd-pro
+ *
+ * Stephan Streichhahn
+ *
+ * 2020
+ *
+ */
 
+// Arduino PADs
+int pad1= A3;
+
+// Arduino baudRate
+int baudRate= 115200;
+
+// Midi Note On / Off
 byte noteOn= 144; 
 byte noteOff= 128;
 
-int del= (50);
-int del2= (50);
+// Dead Times for AD sampling
+int del= 50;
+int del2= 50;
 
-int AR= (1024);
-int MR= (128);
-int CO= (120);
-float CG= ((MR-1)/((AR-1)-CO));
+// Calibration AD to MIDI, with Low Cut
+float AR= 1024.;
+float MR= 128.;
+float CO= 120.;
+float CG= ( (MR-1) / ( (AR-1 ) - CO ));
 
+// Variables for IN and OUT
+int readVal;
+int midiVal; 
+
+// Write a MIDI Message
 void MIDImessage(byte command, byte data1, byte data2)
-
-  {
+{
     Serial.write(command);
     Serial.write(data1);
     Serial.write(data2);
-  }
+}
 
+// Arduino SETUP	
 void setup()
-
-  {
-    Serial.begin(115200);
+{
+    Serial.begin(baudRate);
     pinMode(pad1, INPUT);
-  }
+}
 
+// Arduino MAIN LOOP	
 void loop()
+{
+    // get Analog reading, calibrate to Midi Value
+    readVal= analogRead (pad1);
+    midiVal= int ((readVal-CO)*CG);
 
-  {
+   // disregard negative Values (due to Low Cut Filter CO=120)
+   if (midiVal>0)
+   {
+        MIDImessage (noteOn, 38, midiVal);   // turn note on
+        delay(del);
 
-readVal= analogRead (pad1);
-midiVal= int ((readVal-CO)*CG);
-
-  if (midiVal>0) {
-
-MIDImessage (noteOn, 38, midiVal);   // turn note on
-   delay(del);
-   
-MIDImessage (noteOff, 38, 0);     // turn note off
-   delay(del2);  
-   
+	MIDImessage (noteOff, 38, 0);     // turn note off
+	delay(del2);  
    }
-   }
+}
