@@ -8,6 +8,10 @@
  *
  */
 
+////////////////
+// INIT
+////////////////
+
 // Arduino PADs
 int pad1= A3;
 
@@ -38,6 +42,18 @@ float CG= ( (MR-1) / ( (AR-1 ) - CO )); // Calibration Gradient
 int readVal;
 int midiVal; 
 
+////////////////
+// FUNCTIONS
+////////////////
+
+// Read form Analog pad
+void readAnalog(int pad)
+{
+    // get Analog reading, calibrate to Midi Value
+    readVal= analogRead (pad);
+    return int((readVal-CO)*CG);
+}
+
 // Write a MIDI Message
 void MIDImessage(byte command, byte data1, byte data2)
 {
@@ -45,6 +61,20 @@ void MIDImessage(byte command, byte data1, byte data2)
     Serial.write(data1);
     Serial.write(data2);
 }
+
+// send Midi Note On and than Off, with velocity
+void midiOnOff( byte velocity, int d1, d2) 
+{
+    MIDImessage (noteOn, midiKey, velocity);   // turn note on
+    delay(d1);
+
+    MIDImessage (noteOff, midiKey, 0);     // turn note off
+    delay(d2);  
+}
+
+////////////////
+// ARDUINO Stetup and Loop
+////////////////
 
 // Arduino SETUP
 void setup()
@@ -56,17 +86,12 @@ void setup()
 // Arduino MAIN LOOP
 void loop()
 {
-    // get Analog reading, calibrate to Midi Value
-    readVal= analogRead (pad1);
-    midiVal= int ((readVal-CO)*CG);
+   // Get Anlog reading converted to Midi velocity
+   midiVal=readAnalog(pad1)
 
    // disregard negative Values (due to Low Cut Filter CO=120)
    if (midiVal>0)
    {
-        MIDImessage (noteOn, midiKey, midiVal);   // turn note on
-        delay(del1);
-
-        MIDImessage (noteOff, midiKey, 0);     // turn note off
-        delay(del2);  
+        midiOnOff(midiVal, del1, del2);
    }
 }
