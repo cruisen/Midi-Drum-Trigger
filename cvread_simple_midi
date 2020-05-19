@@ -87,7 +87,7 @@ void setup()
 void loop()
 {
    // Get Anlog reading converted to Midi velocity
-   midiVal=readAnalog(pad1)
+   midiVal=readAnalog(pad1);
 
    // disregard negative Values (due to Low Cut Filter CO=120)
    if (midiVal>0)
