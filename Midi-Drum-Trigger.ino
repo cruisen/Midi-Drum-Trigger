@@ -45,24 +45,24 @@ int midiVal;
 ////////////////
 
 // Read form Analog pad
-int readAnalog( int pad )
+int readAnalog( int padLocal )
 {
     int localAnalog;
     int localMidi;
     
     // get Analog reading, calibrate to Midi Value
-    localAnalog = analogRead( pad );
+    localAnalog = analogRead( padLocal );
     localMidi = int(( localAnalog - calibrationOffSet ) * calibrationGradient );
     
     return localMidi ;
 } ;
 
 // Write a MIDI Message
-void MIDImessage( byte command, byte data1, byte data2 )
+void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 {
-    Serial.write( command );
-    Serial.write( data1 );
-    Serial.write( data2 );
+    Serial.write( commandLocal );
+    Serial.write( dataLocal1 );
+    Serial.write( dataLocal2 );
 } ;
 
 // send Midi Note On and than Off, with velocity
