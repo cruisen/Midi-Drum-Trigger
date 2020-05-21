@@ -27,17 +27,16 @@ byte noteOff = 128 + midiChannel;
 byte midiKey = 38;
 
 // Dead Times for AD sampling
-int del1 = 50;
-int del2 = 50;
+int deadTime1 = 50;
+int deadTime2 = 50;
 
 // Calibration AD to MIDI, with Low Cut
-float AR = 1024.;	// Analog Digital Amplitude Resolution
-float MR = 128.;		// Midi Amplitude Resolution
+float analogResolution = 1024.;	// Analog Digital Amplitude Resolution
+float midiResolution = 128.;		// Midi Difital Amplitude Resolution
 
-float CO = 120.;		// Calibration Offset: Low Cut on Anlog Sample Amplitude
+float calibrationOffSet = 120.;		// Low Cut on Anlog Sample Amplitude
 
-float CG = ( (MR-1) / ( (AR-1 ) - CO )); // Calibration Gradient
-
+float calibrationGradient = ( ( midiResolution - 1 ) / ( ( analogResolution - 1 ) - calibrationOffSet ));
 // Variables for IN and OUT
 int midiVal; 
 
@@ -48,12 +47,14 @@ int midiVal;
 // Read form Analog pad
 int readAnalog( int pad )
 {
-    int ar;
-    int mv;
+    int localAnalog;
+    int localMidi;
+    
     // get Analog reading, calibrate to Midi Value
-    ar= analogRead( pad );
-    mv= int(( ar - CO ) * CG );
-    return mv ;
+    localAnalog = analogRead( pad );
+    localMidi = int(( localAnalog - calibrationOffSet ) * calibrationGradient );
+    
+    return localMidi ;
 } ;
 
 // Write a MIDI Message
@@ -65,13 +66,13 @@ void MIDImessage( byte command, byte data1, byte data2 )
 } ;
 
 // send Midi Note On and than Off, with velocity
-void midiOnOff( byte velocity, int d1, int d2 ) 
+void midiOnOff( byte velocityLocal, int deadTimeLocal1, int deadTimeLocal2 ) 
 {
-    MIDImessage( noteOn, midiKey, velocity );   // turn note on
-    delay( d1 );
+    MIDImessage( noteOn, midiKey, velocityLocal );   // turn note on
+    delay( deadTimeLocal1 );
 
     MIDImessage( noteOff, midiKey, 0 );     // turn note off
-    delay( d2 );  
+    delay( deadTimeLocal2 );  
 }
 
 ////////////////
@@ -91,9 +92,9 @@ void loop()
    // Get Anlog reading converted to Midi velocity
    midiVal = readAnalog( pad1 );
 
-   // disregard negative Values (due to Low Cut Filter CO = 120)
+   // disregard negative Values (due to Low Cut Filter calibrationOffSet = 120)
    if ( midiVal > 0 )
    {
-        midiOnOff( midiVal, del1, del2 );
+        midiOnOff( midiVal, deadTime1, deadTime2 );
    }
 }
