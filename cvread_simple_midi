@@ -51,8 +51,9 @@ void readAnalog(int pad)
 {
     // get Analog reading, calibrate to Midi Value
     readVal= analogRead (pad);
-    return int((readVal-CO)*CG);
-}
+    midiVal= int((readVal-CO)*CG);
+    return midiVal ;
+} ;
 
 // Write a MIDI Message
 void MIDImessage(byte command, byte data1, byte data2)
@@ -60,10 +61,10 @@ void MIDImessage(byte command, byte data1, byte data2)
     Serial.write(command);
     Serial.write(data1);
     Serial.write(data2);
-}
+} ;
 
 // send Midi Note On and than Off, with velocity
-void midiOnOff( byte velocity, int d1, d2) 
+void midiOnOff( byte velocity, byte d1, byte d2) 
 {
     MIDImessage (noteOn, midiKey, velocity);   // turn note on
     delay(d1);
