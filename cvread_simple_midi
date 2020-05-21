@@ -39,7 +39,6 @@ float CO= 120.;		// Calibration Offset: Low Cut on Anlog Sample Amplitude
 float CG= ( (MR-1) / ( (AR-1 ) - CO )); // Calibration Gradient
 
 // Variables for IN and OUT
-int readVal;
 int midiVal; 
 
 ////////////////
@@ -47,12 +46,12 @@ int midiVal;
 ////////////////
 
 // Read form Analog pad
-void readAnalog(int pad)
+int readAnalog(int pad)
 {
     // get Analog reading, calibrate to Midi Value
-    readVal= analogRead (pad);
-    midiVal= int((readVal-CO)*CG);
-    return midiVal ;
+    ar= analogRead (pad);
+    mv= int((ar-CO)*CG);
+    return mv ;
 } ;
 
 // Write a MIDI Message
@@ -64,7 +63,7 @@ void MIDImessage(byte command, byte data1, byte data2)
 } ;
 
 // send Midi Note On and than Off, with velocity
-void midiOnOff( byte velocity, byte d1, byte d2) 
+void midiOnOff( byte velocity, int d1, int d2) 
 {
     MIDImessage (noteOn, midiKey, velocity);   // turn note on
     delay(d1);
