@@ -60,15 +60,15 @@ int deadTime3 = 0;     // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-float noiseGate       =  120.;	  // Off: set to 0; Noise Gate on Anlog Sample Amplitude >= 0
-float compressorKnee  =  500.;    // Limiter on Anlog Sample Amplitude >= noiseGate & <= limit
-float limit           = 1000.;    // Off: set to 1023; Limiter on Anlog Sample Amplitude <= analogResolution - 1 
+float noiseGate       =  120. ;	  // Off: set to 0; Noise Gate on Anlog Sample Amplitude >= 0
+float compressorKnee  =  500. ;    // Limiter on Anlog Sample Amplitude >= noiseGate & <= limit
+float limit           = 1000. ;    // Off: set to 1023; Limiter on Anlog Sample Amplitude <= analogResolution - 1 
 
 
-bool checkValues      = true ;    // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
-bool noiseGateDynamic = true ;    // if True, Amplitude < noiseGate = 0 and Ampitide >= noisegate := Amplitude
+bool checkValues      = false ;    // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
+bool noiseGateDynamic = true  ;    // if True, Amplitude < noiseGate = 0 and Ampitide >= noisegate := Amplitude
                                   // if False, Amplitude < noiseGate = 0 and Ampitide >= noisegate = (Amplitude - noiseGate) * Gradient
-bool compressorOn     = true ;    // if True, Compressor is ON
+bool compressorOn     = true  ;    // if True, Compressor is ON
 
 
 float analogInToMidiCalibration = ( ( midiResolution   - 1 )                    /    ( analogResolution - 1 ) );
@@ -96,6 +96,14 @@ float compressorLimit =         ( ( ( analogResolution - 1 ) - compressorKnee ) 
  * Compressor ON :     compressorOn     = true  ;
  * 
  * Crompessor Knee:    compressorKnee   =  500. ; // Or Other Value >= noiseGate and <= limit
+ * 
+ * 
+ * Audio Parameter Check:
+ * Check OFF:           checkValues     = false ;
+ * Check ON :           checkValues     = true  ; // WARNING: If this is ON, and above parameters are NOT:
+ *                                                // 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
+ *                                                // then the program will stop, Ardunino in endless loop, doing nothing !!!
+ * 
  * 
  */
 
