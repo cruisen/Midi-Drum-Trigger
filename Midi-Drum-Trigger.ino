@@ -213,7 +213,7 @@ int getAnalog( int padLocal ) {
 }
 
 
-// Midi ON
+// Send Midi ON
 void midiOn()
 {
     int i;
@@ -232,6 +232,7 @@ void midiOn()
     }  
 }
 
+// Send Midi Off
 void midiOff()
 {
     int i;
