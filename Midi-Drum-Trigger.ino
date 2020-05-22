@@ -60,15 +60,15 @@ int deadTime3 = 0;     // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-float noiseGate      =  120.;	 // Noise Gate on Anlog Sample Amplitude >= 0
-float compressorKnee =  500.;  // Limiter on Anlog Sample Amplitude >= noiseGate & <= limit
-float limit          = 1000.;  // Limiter on Anlog Sample Amplitude <= analogResolution - 1 
+float noiseGate       =  120.;	  // Off: set to 0; Noise Gate on Anlog Sample Amplitude >= 0
+float compressorKnee  =  500.;    // Limiter on Anlog Sample Amplitude >= noiseGate & <= limit
+float limit           = 1000.;    // Off: set to 1023; Limiter on Anlog Sample Amplitude <= analogResolution - 1 
 
 
-bool checkValues  = true ;     // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
-bool noiseGateDynamic  = true ;     // if True, Amplitude < noiseGate = 0 and Ampitide >= noisegate := Amplitude
-                               // if False, Amplitude < noiseGate = 0 and Ampitide >= noisegate = (Amplitude - noiseGate) * Gradient
-bool compressorOn = true ;     // if True, Compressor is ON
+bool checkValues      = true ;    // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
+bool noiseGateDynamic = true ;    // if True, Amplitude < noiseGate = 0 and Ampitide >= noisegate := Amplitude
+                                  // if False, Amplitude < noiseGate = 0 and Ampitide >= noisegate = (Amplitude - noiseGate) * Gradient
+bool compressorOn     = true ;    // if True, Compressor is ON
 
 
 float analogInToMidiCalibration = ( ( midiResolution   - 1 )                    /    ( analogResolution - 1 ) );
@@ -77,6 +77,27 @@ float compressorGardient =        ( ( analogResolution - 1 )                    
 float compressorLimit =         ( ( ( analogResolution - 1 ) - compressorKnee ) / log( analogResolution ) ) ;
 
 
+/*
+ * USAGE of Audio:
+ * 
+ * NoiseGate:
+ * NoiseGate OFF:      noiseGate        =    0. ;
+ * NoiseGate ON:       noiseGate        =  100. ; // Or Other Values >=0 and <= compressorKnee
+ *
+ * NoiseGate HARD CUT: noiseGateDynamic = false ;
+ * NoiseGate DYNAMIC : noiseGateDynamic = true  ;
+ * 
+ * Limiter:
+ * Limiter OFF:        limit            = 1023. ;
+ * Limiter ON :        limit            = 1000. ; // Or Other Values >=  compressorKnee and <= analogResolution - 1
+ * 
+ * Compressor:
+ * Compressor OFF:     compressorOn     = false ;
+ * Compressor ON :     compressorOn     = true  ;
+ * 
+ * Crompessor Knee:    compressorKnee   =  500. ; // Or Other Value >= noiseGate and <= limit
+ * 
+ */
 
 ////////////////
 // FUNCTIONS
