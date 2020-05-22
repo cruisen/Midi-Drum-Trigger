@@ -156,12 +156,12 @@ float noiseGateCompressorLimiter( int analogLocal ) {
         return 0. ;
     }
 
-    // noise gate with or without enhancer
+    // noise gate with or without dynamic enhancer
     if ( noiseGate ) {
         // with out enhancer
         linearLocal =  analogLocal ;    
     } else {
-        // with enhancer
+        // with dynamic enhancer
         linearLocal = ( analogLocal - noiseGate ) * noiseGateEnhancerGardient ;    
     }
     
