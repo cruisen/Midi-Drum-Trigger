@@ -61,8 +61,8 @@ int deadTime3 =  0;     // between individual Midi Messages
 
 // Noise Gate & Limiter & Compressor
 float noiseGate       =  120. ;	  // Off: set to 0; Noise Gate on Anlog Sample Amplitude >= 0
-float compressorKnee  =  500. ;   // Limiter on Anlog Sample Amplitude >= noiseGate & <= limit
-float limit           = 1000. ;   // Off: set to 1023; Limiter on Anlog Sample Amplitude <= analogResolution - 1 
+float compressorKnee  =  120. ;   // Limiter on Anlog Sample Amplitude >= noiseGate & <= limit
+float limit           =  900. ;   // Off: set to 1023; Limiter on Anlog Sample Amplitude <= analogResolution - 1 
 
 
 bool checkValues      = false ;   // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
@@ -89,13 +89,13 @@ float compressorLimit =         ( ( ( analogResolution - 1 ) - compressorKnee ) 
  * 
  * Limiter:
  * Limiter OFF:        limit            = 1023. ;
- * Limiter ON :        limit            = 1000. ; // Or Other Values >=  compressorKnee and <= analogResolution - 1
+ * Limiter ON :        limit            =  900. ; // Or Other Values >=  compressorKnee and <= analogResolution - 1
  * 
  * Compressor:
  * Compressor OFF:     compressorOn     = false ;
  * Compressor ON :     compressorOn     = true  ;
  * 
- * Crompessor Knee:    compressorKnee   =  500. ; // Or Other Value >= noiseGate and <= limit
+ * Crompessor Knee:    compressorKnee   =  120. ; // Or Other Value >= noiseGate and <= limit
  * 
  * 
  * Audio Parameter Check:
