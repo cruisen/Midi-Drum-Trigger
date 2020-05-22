@@ -5,6 +5,8 @@
  * Stephan Streichhahn
  *
  * 2020
+ * 
+ * Support by Nikolai von Krusenstiern
  *
  */
 
@@ -12,17 +14,38 @@
 // INIT
 ////////////////
 
+bool DEBUG = false ;
+
+
+////////////////
+// Arduino
+////////////////
+
 // Arduino PADs
 int padMax = 1;
 int pad[] = {A3};        // first element is pad[0] !!!
 byte midiKey[] = {38};   // The Midi Channel for this Pad
 
-// Arduino baudRate
-int baudRate = 115200;
+// Arduino Midi Serial Out Baud Rate
+long midiRate = 115200L;
+long serialRate = 9600L;
 
-// Midi Note On / Off
+
+////////////////
+// Calibration
+////////////////
+
+// Calibration AD to MIDI
+float analogResolution = 1024.;  // Analog Digital Amplitude Resolution
+float midiResolution = 128.;    // Midi Difital Amplitude Resolution
+
+
+////////////////
+// Midi
+////////////////
+
+// Midi Channel & Note On / Off
 byte midiChannel = 0 ; // 0-15 for 1 to 16
-
 byte noteOn = 144 + midiChannel; 
 byte noteOff = 128 + midiChannel;
 
@@ -31,15 +54,28 @@ int deadTime1 = 50;    // between Midi Notes On and Midi Notes Off
 int deadTime2 = 50;    // between Midi Notes Off and Midi Notes On
 int deadTime3 = 0;     // between individual Midi Messages
 
-// Calibration AD to MIDI, with Low Cut
-float analogResolution = 1024.;	// Analog Digital Amplitude Resolution
-float midiResolution = 128.;		// Midi Difital Amplitude Resolution
 
-float calibrationOffSet = 120.;		// Low Cut on Anlog Sample Amplitude
+////////////////
+// AUDIO
+////////////////
 
-float calibrationGradient = ( ( midiResolution - 1 ) / ( ( analogResolution - 1 ) - calibrationOffSet ));
-// Variables for IN and OUT
-int midiVal; 
+// Noise Gate & Limiter & Compressor
+float noiseGate      =  120.;	 // Noise Gate on Anlog Sample Amplitude >= 0
+float compressorKnee =  500.;  // Limiter on Anlog Sample Amplitude >= noiseGate & <= limit
+float limit          = 1000.;  // Limiter on Anlog Sample Amplitude <= analogResolution - 1 
+
+
+bool checkValues  = true ;     // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
+bool noiseGateOn  = true ;     // if True, Amplitude < noiseGate = 0 and Ampitide >= noisegate := Amplitude
+                               // if False, Amplitude < noiseGate = 0 and Ampitide >= noisegate = (Amplitude - noiseGate) * Gradient
+bool compressorOn = true ;     // if True, Compressor is ON
+
+
+float analogInToMidiCalibration = ( ( midiResolution   - 1 )                    /    ( analogResolution - 1 ) );
+float noiseGateEnhancerGardient = ( ( analogResolution - 1 )                    /  ( ( analogResolution - 1 ) - noiseGate ) );
+float compressorGardient =        ( ( analogResolution - 1 )                    /  ( ( analogResolution - 1 ) - compressorKnee ) ) ;
+float compressorLimit =         ( ( ( analogResolution - 1 ) - compressorKnee ) / log( analogResolution ) ) ;
+
 
 
 ////////////////
@@ -47,67 +83,121 @@ int midiVal;
 ////////////////
 
 // Debug Function
+void printDebug( String nameLocal, long valueLocal ) {
+    if ( DEBUG ) {
+       Serial.print( millis()        ); \
+       Serial.print( ': '            ); \
+       Serial.print( __FUNCTION__    ); \
+       Serial.print( '() '           ); \
+       Serial.print( ': '            ); \
+       Serial.print( __LINE__        ); \
+       Serial.print( ': '            ); \
+       Serial.print( nameLocal       ); \
+       Serial.print( ': '            ); \
+       Serial.print( valueLocal, DEC ); \
+       Serial.println(               );      
+    } ;
+}
 
-//#define DEBUG
-#ifdef DEBUG
-   #define DEBUG_PRINT(x)     Serial.print(x)
-   #define DEBUG_PRINTDEC(x)  Serial.print(x, DEC)
-   #define DEBUG_PRINTLN(x)   Serial.println(x)
-#else
-   #define DEBUG_PRINT(x)
-   #define DEBUG_PRINTDEC(x)
-   #define DEBUG_PRINTLN(x)
-#endif
 
-// Read form Analog pad
-int readAnalog( int padLocal )
+// Check Constants
+bool checkIfAudioParaOK()
 {
-    int localAnalog;
-    int localMidi;
+    if ( checkValues ) {
+        // noiseGate Value Check
+        if ( noiseGate < 0 or noiseGate > analogResolution - 1 ) {
+          return false;
+        };
+        
+        // compressorKnee Value Check
+        if ( compressorKnee < noiseGate or compressorKnee > analogResolution - 1 ) {
+          return false;
+        };
+        
+        // compressorKnee Value Check
+        if ( limit < compressorKnee or limit > analogResolution - 1 ) {
+          return false;
+        };
+    };
+
+    return true;
+}
+
+
+//  Noise Gate, Compressor and Limiter
+float noiseGateCompressorLimiter( int analogLocal ) {
+
+    float linearLocal ;
+    float localCompressed ;
+
+    // noise Gate
+    if ( analogLocal < noiseGate ) {
+        return 0. ;
+    }
+
+    // noise gate with or without enhancer
+    if ( noiseGate ) {
+        // with out enhancer
+        linearLocal =  analogLocal ;    
+    } else {
+        // with enhancer
+        linearLocal = ( analogLocal - noiseGate ) * noiseGateEnhancerGardient ;    
+    }
     
-    // get Analog reading, calibrate to Midi Value
-    localAnalog = analogRead( padLocal );
-    localMidi = int(( localAnalog - calibrationOffSet ) * calibrationGradient );
+    // Then linear until compressor Knee, or beyond, if compressor is of
+    if ( ( linearLocal < compressorKnee ) or ( !compressorOn ) ) {
+        return linearLocal ;
+    }
+
+    // Compressor above the Compressor Knee
+    localCompressed = log( ( linearLocal - compressorKnee ) * compressorGardient + 1 )  * compressorLimit + compressorKnee ; 
+    return localCompressed ;
     
-    return localMidi ;
 } ;
+
 
 // Write a MIDI Message
 void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 {
-    #ifdef DEBUG
-        DEBUG_PRINT("commandLocal: ");
-        DEBUG_PRINTDEC(commandLocal);
-        
-        DEBUG_PRINT(", dataLocal1: ");
-        DEBUG_PRINTDEC(dataLocal1);
-        
-        DEBUG_PRINT(", dataLocal2:");
-        DEBUG_PRINTDEC(dataLocal2);
-
-        DEBUG_PRINTLN("");
-
-    #else
+    printDebug( "commandLocal", long(commandLocal) );
+    printDebug( "dataLocal1",   long(dataLocal1)   );
+    printDebug( "dataLocal2",   long(dataLocal2)   );
+    
+    if ( !DEBUG ) {
         Serial.write( commandLocal );
         Serial.write( dataLocal1 );
         Serial.write( dataLocal2 );
-    #endif
+    }
 } ;
+
+
+// get audio calibrated for MIDI
+int getAnalog( int padLocal ) {
+   
+    int analogInLocal;
+    int analogOutLocal;
+        
+    analogInLocal = analogRead( padLocal );;
+    analogOutLocal = int( noiseGateCompressorLimiter( analogInLocal ) * analogInToMidiCalibration ) ;
+
+    return analogOutLocal ;
+}
 
 
 // Midi ON
 void midiOn()
 {
     int i;
+    int analogOutLocal;
     
     for ( i = 0 ; i < padMax ; i++ ) {
-        // Get Analog reading converted to Midi velocity
-        midiVal = readAnalog( pad[i] );
-    
-        // disregard negative Values (due to Low Cut Filter calibrationOffSet = 120)
-        if ( midiVal > 0 )
-        {
-            MIDImessage( noteOn, midiKey[i], midiVal );   // turn note on
+      
+        // Get Analog reading already converted to Midi velocity
+        analogOutLocal = getAnalog( pad[i] );
+
+        // disregard negative Values (due to Low Cut Filter noiseGate = 120)
+        if ( analogOutLocal > 0 ) {
+            MIDImessage( noteOn, midiKey[i], analogOutLocal );   // turn note on
             delay( deadTime3 );
         }
     }  
@@ -123,6 +213,20 @@ void midiOff()
     }
 }
 
+// Prepare SERIAL Out Baud Rate
+void prepareSerial() {
+
+    long rate ; 
+ 
+    if ( DEBUG ) {
+        rate = serialRate ;
+    } else {
+        rate = midiRate ;      
+    }
+    
+    Serial.begin( rate );
+}
+
 
 ////////////////
 // ARDUINO Stetup and Loop
@@ -133,17 +237,22 @@ void setup()
 {
     int i;
 
-    #ifdef DEBUG
-        Serial.begin(9600);
-    #else
-        Serial.begin( baudRate );
-    #endif
-    
-    // init ALL PADs as INPUT
+    // INIT ALL PADs as INPUT
     for ( i = 0 ; i < padMax ; i++ ) {
         pinMode( pad[i], INPUT );
     }
+
+    // Prepare Serial
+    prepareSerial();
+    
+    // Check Audio Parameter Configuration
+    if ( !checkIfAudioParaOK() ) {
+        // IF WRONG AUDIO configuration -> dye
+        // AI NvK: Would be better to have a Compiler Error here...
+        exit(1);
+    }
 }
+
 
 // Arduino MAIN LOOP
 void loop()
