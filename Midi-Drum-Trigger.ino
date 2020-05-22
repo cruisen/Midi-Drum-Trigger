@@ -66,7 +66,7 @@ float limit          = 1000.;  // Limiter on Anlog Sample Amplitude <= analogRes
 
 
 bool checkValues  = true ;     // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
-bool noiseGateOn  = true ;     // if True, Amplitude < noiseGate = 0 and Ampitide >= noisegate := Amplitude
+bool noiseGateDynamic  = true ;     // if True, Amplitude < noiseGate = 0 and Ampitide >= noisegate := Amplitude
                                // if False, Amplitude < noiseGate = 0 and Ampitide >= noisegate = (Amplitude - noiseGate) * Gradient
 bool compressorOn = true ;     // if True, Compressor is ON
 
