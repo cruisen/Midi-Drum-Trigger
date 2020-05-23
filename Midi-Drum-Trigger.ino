@@ -231,7 +231,7 @@ void midiOn()
         analogOutLocal = getAnalog( pad[i] );
 
         // disregard negative Values (due to Low Cut Filter noiseGate)
-        if ( ( analogOutLocal > 0 ) AND ( analogOutLocal >= padStoreAndHold[i] ) ) {
+        if ( ( analogOutLocal > 0 ) && ( analogOutLocal >= padStoreAndHold[i] ) ) {
             MIDImessage( noteOn, midiKey[i], analogOutLocal );   // turn note on
             sentOn[i] = true ;
             padStoreAndHold[i] = analogOutLocal ;
@@ -248,7 +248,7 @@ void midiOff()
     for ( i = 0 ; i < padMax ; i++ ) {
         if ( sentOn[i] = true ) {
             MIDImessage( noteOff, midiKey[i], 0 );     // turn note off
-            sent[i] = false ;
+            sentOn[i] = false ;
             delay( deadTime3 );
         }
         padStoreAndHold[i]  = int ( releaseFactor * padStoreAndHold[i] ) ;
