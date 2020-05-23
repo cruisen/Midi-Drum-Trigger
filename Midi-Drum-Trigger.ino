@@ -50,13 +50,13 @@ float midiResolution   =  128.;  //   Midi Digital Amplitude Resolution
 ////////////////
 
 // Midi Channel & Note On / Off
-byte midiChannel = 0 ; // 0-15 for 1 to 16
-byte noteOn =  144 + midiChannel; 
-byte noteOff = 128 + midiChannel;
+byte midiChannel =   0 ; // 0-15 for 1 to 16
+byte noteOn      = 144 + midiChannel; 
+byte noteOff     = 128 + midiChannel;
 
 // Dead Times for AD sampling
 int deadTime1 = 50;    // between Midi Notes On and Midi Notes Off
-int deadTime2 = 50;    // between Midi Notes Off and Midi Notes On
+int deadTime2 =  0;    // between Midi Notes Off and Midi Notes On
 int deadTime3 =  0;     // between individual Midi Messages
 
 
@@ -65,52 +65,55 @@ int deadTime3 =  0;     // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-float noiseGate       =  120. ;	  // Off: set to 0; Noise Gate on Anlog Sample Amplitude >= 0
-float compressorKnee  =  120. ;   // Limiter on Anlog Sample Amplitude >= noiseGate & <= limit
-float limit           =  900. ;   // Off: set to 1023; Limiter on Anlog Sample Amplitude <= analogResolution - 1 
+bool noiseGateOn         =  true  ;   // if True, NOISE GATE is ON
+bool compressorOn        =  true  ;   // if True, COMPRESSOR is ON
+bool limiterOn           =  true  ;   // if True, LIMITER is ON
 
+bool noiseGateEnhancerOn = false  ;   // if True, regain dynamic range lost by NOISE GATE: Noise Gate Enhancer
+bool enhancerOn          =  true  ;   // if True, regain dynamic rangelost by COMPRESSOR and/or LIMITER: Enhancer
 
-bool checkValues      = false ;   // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
-bool noiseGateDynamic = true  ;   // if True, Amplitude < noiseGate = 0 and Ampitide >= noisegate := Amplitude
-                                  // if False, Amplitude < noiseGate = 0 and Ampitide >= noisegate = (Amplitude - noiseGate) * Gradient
-bool compressorOn     = true  ;   // if True, Compressor is ON
+float noiseGate          =   120. ;   // Off: set to 0; Noise Gate on Anlog Sample Amplitude >= 0
+float compressorKnee     =   120. ;   // Limiter on Anlog Sample Amplitude >= noiseGate & <= limit
+float limiter            =   900. ;   // Off: set to 1023; Limiter on Anlog Sample Amplitude <= analogResolution - 1 
 
+float compressorSpread   =  10^6  ;   // Logarythmic spread 
 
-float analogInToMidiCalibration = ( (   midiResolution - 1 )                    /    ( analogResolution - 1 ) );
-float noiseGateEnhancerGardient = ( ( analogResolution - 1 )                    /  ( ( analogResolution - 1 ) - noiseGate ) );
-float compressorGardient =        ( ( analogResolution - 1 )                    /  ( ( analogResolution - 1 ) - compressorKnee ) ) ;
-float compressorLimit =         ( ( ( analogResolution - 1 ) - compressorKnee ) / log( analogResolution     ) ) ;
+bool checkValues         = false  ;     // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
 
 
 /*
  * USAGE of Audio:
  * 
  * NoiseGate:
- * NoiseGate OFF:      noiseGate        =    0. ;
- * NoiseGate ON:       noiseGate        =  100. ; // Or Other Values >=0 and <= compressorKnee
+ * NoiseGate ON :      noiseGateOn         = true  ;
+ * NoiseGate OFF:      noiseGateOn         = false ; 
  *
- * NoiseGate HARD CUT: noiseGateDynamic = false ;
- * NoiseGate DYNAMIC : noiseGateDynamic = true  ;
+ * NoiseGate HARD CUT: noiseGateEnhancerOn = false ;
+ * NoiseGate DYNAMIC : noiseGateEnhancerOn = true  ;
  * 
  * Limiter:
- * Limiter OFF:        limit            = 1023. ;
- * Limiter ON :        limit            =  900. ; // Or Other Values >=  compressorKnee and <= analogResolution - 1
+ * Limiter ON :        limiterOn           = true  ;
+ * Limiter OFF:        limiterOn           = false ; 
  * 
  * Compressor:
- * Compressor OFF:     compressorOn     = false ;
- * Compressor ON :     compressorOn     = true  ;
- * 
- * Crompessor Knee:    compressorKnee   =  120. ; // Or Other Value >= noiseGate and <= limit
- * 
+ * Compressor ON :     compressorOn        = true  ;
+ * Compressor OFF:     compressorOn        = false ;
  * 
  * Audio Parameter Check:
- * Check OFF:           checkValues     = false ;
- * Check ON :           checkValues     = true  ; // WARNING: If this is ON, and above parameters are NOT:
+ * Check ON :           checkValues     = true  ; // WARNING: If this is ON, and above parameters are NOT in Sequence like
  *                                                // 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
  *                                                // then the program will stop, Ardunino in endless loop, doing nothing !!!
- * 
+ * Check OFF:           checkValues     = false ;
  * 
  */
+
+// Global Audio Constants
+float analogInToMidiCalibration = ( (   midiResolution - 1 )                    /    ( analogResolution - 1 ) );
+
+float noiseGateEnhancerGradient ;
+float enhancerGradient ;
+float enhancerMinimum ;
+
 
 ////////////////
 // FUNCTIONS
@@ -140,17 +143,17 @@ bool checkIfAudioParaOK()
     if ( checkValues ) {
       
         // noiseGate Value Check
-        if (      noiseGate > compressorKnee or noiseGate < 0 ) {
+        if ( noiseGate > compressorKnee or noiseGate < 0 ) {
           return false;
         };
         
         // compressorKnee Value Check
-        if ( compressorKnee > limit) {
+        if ( compressorKnee > limiter ) {
           return false;
         };
         
         // limit Value Check
-        if (          limit > analogResolution - 1 ) {
+        if ( limiter > analogResolution - 1 ) {
           return false;
         };
     };
@@ -158,37 +161,92 @@ bool checkIfAudioParaOK()
     return true;
 }
 
+// calculate audio settings
+void calculateAudioSettings(){
+
+    float ngLocal ;
+    float eMaxLocal ;
+    
+    // for NOISE GATE
+    if ( compressorOn ) {
+        ngLocal = compressorKnee - 1 ;
+    } else {
+        if ( limiterOn ) {
+            ngLocal = limiter - 1 ;
+        } else {
+            ngLocal = analogResolution - 1 ;
+        }
+    }
+    noiseGateEnhancerGradient = ngLocal / ( ngLocal - noiseGate );
+
+    // for ENHANCER
+    if ( limiterOn ) {
+        eMaxLocal = limiter ;
+    } else {
+        if ( compressorOn ) {
+            eMaxLocal =  log( ( (analogResolution - 1) - compressorKnee ) *  compressorSpread ) + compressorKnee ;      
+        } else {
+            eMaxLocal = analogResolution - 1 ;      
+        }
+    }
+
+    if ( noiseGateEnhancerOn ) {
+        enhancerMinimum = limiter ;
+    } else {
+        enhancerMinimum = 0 ;
+    }
+
+    // 
+    enhancerGradient = ( analogResolution - 1 ) / ( eMaxLocal - enhancerMinimum ) ;
+}
+
+
 
 //  Noise Gate, Compressor and Limiter
 float noiseGateCompressorLimiter( int analogLocal ) {
 
     float linearLocal ;
-    float localCompressed ;
+    float compressedLocal ;
 
-    // noise Gate
-    if ( analogLocal < noiseGate ) {
+    // NOISE GATE
+    if ( analogLocal <= noiseGate ) {
         return 0. ;
     }
 
+    // LIMITER
+    if ( linearLocal >= limiter  ) {
+        return limiter ;
+    }
+
     // noise gate with or without dynamic enhancer
-    if ( noiseGateDynamic ) {
+    if ( ( noiseGateEnhancerOn ) && ( analogLocal < compressorKnee ) ) {
         // with dynamic enhancer
-        linearLocal = ( analogLocal - noiseGate ) * noiseGateEnhancerGardient ;
+        linearLocal = ( analogLocal - noiseGate ) * noiseGateEnhancerGradient ;
     } else {
         // without dynamic enhancer
         linearLocal =  analogLocal ; 
     }
-    
-    // Then linear until compressor Knee, or beyond, if compressor is of anyway
-    if ( ( linearLocal < compressorKnee ) or ( !compressorOn ) ) {
+
+    // Rest linear until compressor Knee, or beyond, if compressor is off anyway
+    if ( ( !compressorOn ) || ( analogLocal <= compressorKnee ) ) {
         return linearLocal ;
     }
 
     // Compressor above the Compressor Knee
-    localCompressed = log( ( linearLocal - compressorKnee ) * compressorGardient + 1 )  * compressorLimit + compressorKnee ; 
-    return localCompressed ;
+    compressedLocal = log( ( analogLocal - compressorKnee ) * compressorSpread + 1 ) + compressorKnee ; 
+    return compressedLocal ;
     
 } ;
+
+// ENHANCER
+float enhancer( float audioLocal ) {
+  
+  if ( enhancerOn ) {
+    audioLocal = ( audioLocal - enhancerMinimum ) * enhancerGradient ;
+  }
+  
+  return audioLocal ;
+}
 
 
 // Write a MIDI Message
@@ -209,11 +267,13 @@ void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 // get audio calibrated for MIDI
 int getAnalog( int padLocal ) {
    
+    float audio ;
     int analogInLocal;
     int analogOutLocal;
         
     analogInLocal = analogRead( padLocal );;
-    analogOutLocal = int( noiseGateCompressorLimiter( analogInLocal ) * analogInToMidiCalibration ) ;
+    audio = noiseGateCompressorLimiter( analogInLocal ) ;
+    analogOutLocal = int( enhancer( audio) * analogInToMidiCalibration ) ;
 
     return analogOutLocal ;
 }
@@ -233,8 +293,10 @@ void midiOn()
         // disregard negative Values (due to Low Cut Filter noiseGate)
         if ( ( analogOutLocal > 0 ) && ( analogOutLocal >= padStoreAndHold[i] ) ) {
             MIDImessage( noteOn, midiKey[i], analogOutLocal );   // turn note on
+            
             sentOn[i] = true ;
             padStoreAndHold[i] = analogOutLocal ;
+            
             delay( deadTime3 );
         }
     }  
@@ -247,10 +309,14 @@ void midiOff()
     
     for ( i = 0 ; i < padMax ; i++ ) {
         if ( sentOn[i] = true ) {
+            
             MIDImessage( noteOff, midiKey[i], 0 );     // turn note off
+            
             sentOn[i] = false ;
+            
             delay( deadTime3 );
         }
+        
         padStoreAndHold[i]  = int ( releaseFactor * padStoreAndHold[i] ) ;
     }
 }
