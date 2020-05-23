@@ -64,20 +64,20 @@ int deadTime3 =  0;    // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-bool  noiseGateOn         =  true  ;   // if True, NOISE GATE is ON
+bool  noiseGateOn         =  false  ;   // if True, NOISE GATE is ON
 bool  decayFilterOn       =  true  ;   // if True, DECAY FILTER is ON
-bool  compressorOn        =  true  ;   // if True, COMPRESSOR is ON, turns also LIMITER ON (with limit=limiter !), so we have a Limiting Compressor
-bool  limiterOn           =  true  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
+bool  compressorOn        =  false  ;   // if True, COMPRESSOR is ON, turns also LIMITER ON (with limit=limiter !), so we have a Limiting Compressor
+bool  limiterOn           =  false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
 
 bool  noiseGateEnhancerOn = false  ;   // if True, regain dynamic range lost by NOISE GATE: midiOut [0..noiseGate..(limiter|1023)] ; Noise Gate Enhancer
-bool  enhancerOn          =  true  ;   // if True, regain dynamic range lost by LIMITER   : midiOut [(0|noiseGate)..1023]          ; Enhancer
+bool  enhancerOn          =  false  ;   // if True, regain dynamic range lost by LIMITER   : midiOut [(0|noiseGate)..1023]          ; Enhancer
 
 float noiseGate           =   120. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
 float decayFactor         =     0.5;   // Decay Filter Factor for dynamic pad noise gate
 float compressorKnee      =   120. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorKnee ) { midiOut = compressor( analogIn) }
 float limiter             =   900. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
 
-float compressorSpread    =  10^6  ;   // Logarithmic spread of Compressor
+float compressorSpread    =  10^5  ;   // Logarithmic spread of Compressor
 
 bool  checkValues         = false  ;   // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
 
