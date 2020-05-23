@@ -166,12 +166,12 @@ float noiseGateCompressorLimiter( int analogLocal ) {
     }
 
     // noise gate with or without dynamic enhancer
-    if ( noiseGate ) {
-        // without dynamic enhancer
-        linearLocal =  analogLocal ;    
-    } else {
+    if ( noiseGateDynamic ) {
         // with dynamic enhancer
-        linearLocal = ( analogLocal - noiseGate ) * noiseGateEnhancerGardient ;    
+        linearLocal = ( analogLocal - noiseGate ) * noiseGateEnhancerGardient ;
+    } else {
+        // without dynamic enhancer
+        linearLocal =  analogLocal ; 
     }
     
     // Then linear until compressor Knee, or beyond, if compressor is of anyway
