@@ -1,4 +1,4 @@
-/* CD to Piezeo to Midi
+/* CD to Piezo to Midi
  *
  * by: sd-pro
  *
@@ -22,18 +22,18 @@ bool DEBUG = false ;
 ////////////////
 
 // Arduino PADs
-int padMax = 1;
-int pad[] = {A3};        // First element is pad[0] !!!
-byte midiKey[] = {38};   // The Midi Channel for this Pad
+int   padMax            =    1    ;
+int   pad[]             = {A3}    ;  // First element is pad[0] !!!
+byte  midiKey[]         = {38}    ;  // The Midi Channel for this Pad
 
-// and some temp arrays for the pads as well
-bool sentOn[] = {false};     // remember, if sent Midi On
-int padStoreAndHold[] = {0}; // individual dynamic pad noise gate
-float releaseFactor = 0.6 ; // dye off factor for dynamic pad noise gate
+// and some temp arrays for the PADs
+bool  sentOn[]          = {false} ;  // remember, if sent Midi On
+int   padStoreAndHold[] = {0}     ;  // individual dynamic pad noise gate
+float releaseFactor     = 0.6     ;  // dye off factor for dynamic pad noise gate
 
 // Arduino Midi Serial Out Baud Rate
-long midiRate = 115200L;
-long serialRate = 9600L;
+long  midiRate = 115200L;
+long  serialRate = 9600L;
 
 
 ////////////////
@@ -76,7 +76,7 @@ float noiseGate           =   120. ;   // Noise Gate on Analog Sample Amplitude:
 float compressorKnee      =   120. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorKnee ) { midiOut = compressor( analogIn) }
 float limiter             =   900. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
 
-float compressorSpread    =  10^6  ;   // Logarythmic spread of Compressor
+float compressorSpread    =  10^6  ;   // Logarithmic spread of Compressor
 
 bool  checkValues         = false  ;   // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
 
@@ -102,13 +102,13 @@ bool  checkValues         = false  ;   // if True, check if 0 <= noiseGate <= co
  * Audio Parameter Check:
  * Check ON :           checkValues     = true  ; // WARNING: If this is ON, and above parameters are NOT in Sequence like
  *                                                // 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
- *                                                // then the program will stop, Ardunino in endless loop, doing nothing !!!
+ *                                                // then the program will stop, Arduino in endless loop, doing nothing !!!
  * Check OFF:           checkValues     = false ;
  * 
  */
 
 // Global Audio Constants
-float analogInToMidiCalibration = ( (   midiResolution - 1 )                    /    ( analogResolution - 1 ) );
+float analogInToMidiCalibration = ( ( midiResolution - 1 ) / ( analogResolution - 1 ) );
 
 float noiseGateEnhancerGradient ;
 float enhancerGradient ;
@@ -170,7 +170,7 @@ void calculateAudioSettings(){
     
     // Gradient for NOISE GATE
     if ( compressorOn ) {
-        noiseGatenhancerInMaxLocal = compressorKnee - 1 ;
+            noiseGatenhancerInMaxLocal = compressorKnee - 1 ;
     } else {
         if ( limiterOn ) {
             noiseGatenhancerInMaxLocal = limiter - 1 ;
@@ -355,7 +355,7 @@ void prepareSerial() {
 
 
 ////////////////
-// ARDUINO Stetup and Loop
+// ARDUINO Setup and Loop
 ////////////////
 
 // Arduino SETUP
@@ -394,5 +394,3 @@ void loop()
 /*
  * END
  */
-
- 
