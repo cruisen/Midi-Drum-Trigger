@@ -420,7 +420,7 @@ void midiOff()
     int i;
     
     for ( i = 0 ; i < padMax ; i++ ) {
-        if ( sentOn[i] = true ) {
+        if ( sentOn[i] == true ) {
             
             MIDImessage( noteOff, midiKey[i], 0 ) ;     // turn note off
             
