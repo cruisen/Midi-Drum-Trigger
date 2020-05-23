@@ -25,6 +25,7 @@ bool DEBUG = false ;
 int padMax = 1;
 int pad[] = {A3};        // First element is pad[0] !!!
 byte midiKey[] = {38};   // The Midi Channel for this Pad
+bool sentOn[false] ;     // remember, if sent Midi On
 
 // Arduino Midi Serial Out Baud Rate
 long midiRate = 115200L;
@@ -228,6 +229,7 @@ void midiOn()
         // disregard negative Values (due to Low Cut Filter noiseGate = 120)
         if ( analogOutLocal > 0 ) {
             MIDImessage( noteOn, midiKey[i], analogOutLocal );   // turn note on
+            sentOn[i] = true ;
             delay( deadTime3 );
         }
     }  
@@ -239,8 +241,11 @@ void midiOff()
     int i;
     
     for ( i = 0 ; i < padMax ; i++ ) {
-        MIDImessage( noteOff, midiKey[i], 0 );     // turn note off
-        delay( deadTime3 );
+        if ( sentOn[i] = true ) {
+            MIDImessage( noteOff, midiKey[i], 0 );     // turn note off
+            sent[i] = false ;
+            delay( deadTime3 );
+        }
     }
 }
 
