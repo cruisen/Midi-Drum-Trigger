@@ -28,12 +28,12 @@ byte  midiKey[]         = {38}    ;  // The Midi Channel for this Pad
 
 // and some temp arrays for the PADs
 bool  sentOn[]          = {false} ;  // remember, if sent Midi On
-int   padStoreAndHold[] = {0}     ;  // individual dynamic pad noise gate
+int   decayFilter[]     = {0}     ;  // for each pad: dynamic noise gate (decay Filter), init with "0"
 float releaseFactor     = 0.6     ;  // dye off factor for dynamic pad noise gate
 
 // Arduino Midi Serial Out Baud Rate
-long  midiRate = 115200L;
-long  serialRate = 9600L;
+long  midiRate          = 115200L ;
+long  serialRate        =   9600L ;
 
 
 ////////////////
@@ -57,7 +57,7 @@ byte noteOff     = 128 + midiChannel;
 // Dead Times for AD sampling
 int deadTime1 = 50;    // between Midi Notes On and Midi Notes Off
 int deadTime2 =  0;    // between Midi Notes Off and Midi Notes On
-int deadTime3 =  0;     // between individual Midi Messages
+int deadTime3 =  0;    // between individual Midi Messages
 
 
 ////////////////
@@ -116,7 +116,7 @@ float enhancerInMinimum ;
 
 
 ////////////////
-// FUNCTIONS
+// HELPER FUNCTIONS
 ////////////////
 
 // Debug Function
@@ -137,8 +137,43 @@ void printDebug( String nameLocal, long valueLocal ) {
 }
 
 
-// Check Constants
-bool checkIfAudioParaOK()
+////////////////
+// INIT HARDWARE FUNCTIONS
+////////////////
+
+// INIT all PADs
+void initPads() {
+
+      int i;
+
+      // INIT ALL PADs as INPUT
+      for ( i = 0 ; i < padMax ; i++ ) {
+          pinMode( pad[i], INPUT );
+      }
+}
+
+
+// Prepare SERIAL Out Baud Rate
+void prepareSerial() {
+
+    long rate ; 
+ 
+    if ( DEBUG ) {
+        rate = serialRate ;
+    } else {
+        rate = midiRate ;      
+    }
+    
+    Serial.begin( rate );    
+}
+
+
+////////////////
+// INIT AUDIO FUNCTIONS
+////////////////
+
+// Check Audio Constants
+bool checkIfAudioPara()
 {
     if ( checkValues ) {
       
@@ -161,31 +196,51 @@ bool checkIfAudioParaOK()
     return true;
 }
 
-// calculate audio settings
-void calculateAudioSettings(){
 
-    float noiseGatenhancerInMaxLocal ;
-    float enhancerInMaxLocal ;
-    int   enhancerOutMaxLocal ;
+// Exit, if not OK
+void checkIfAudioParaOK() {
+
+    // IF WRONG AUDIO configuration -> dye
+    // AI NvK: Would be better to have a Compiler Error here...
+
+    if ( !checkIfAudioPara() ) {
+        exit(1);
+    }
+}
+
+// get noiseGateEnhancerGradient
+float getNoiseGateEnhancerGradient() {
     
+    float noiseGateEnhancerInMaxLocal ;
+    float noiseGateEnhancerGradientLocal ;
+
     // Gradient for NOISE GATE
     if ( compressorOn ) {
-            noiseGatenhancerInMaxLocal = compressorKnee - 1 ;
+            noiseGateEnhancerInMaxLocal = compressorKnee - 1 ;
     } else {
         if ( limiterOn ) {
-            noiseGatenhancerInMaxLocal = limiter - 1 ;
+            noiseGateEnhancerInMaxLocal = limiter - 1 ;
         } else {
-            noiseGatenhancerInMaxLocal = analogResolution - 1 ;
+            noiseGateEnhancerInMaxLocal = analogResolution - 1 ;
         }
     }
-    noiseGateEnhancerGradient = noiseGatenhancerInMaxLocal / ( noiseGatenhancerInMaxLocal - noiseGate );
+    noiseGateEnhancerGradientLocal = noiseGateEnhancerInMaxLocal / ( noiseGateEnhancerInMaxLocal - noiseGate );
 
+    return noiseGateEnhancerGradientLocal ;
+}
 
-    // Maximum of ENHANCER OUT signal
-    if ( limiterOn && !enhancerOn ) {
-        enhancerOutMaxLocal = limiter ;
+// get enhancerGradient
+float getEnhancerGradient() {
+    
+    float enhancerInMaxLocal    ;
+    int   enhancerOutMaxLocal   ;
+    float enhancerGradientLocal ;
+
+    // Minimum of ENHANCER IN signal
+    if ( noiseGateEnhancerOn ) {
+        enhancerInMinimum = limiter ;
     } else {
-        enhancerOutMaxLocal = analogResolution - 1 ;
+        enhancerInMinimum = 0 ;
     }
 
     // Maximum of ENHANCER IN signal
@@ -199,23 +254,38 @@ void calculateAudioSettings(){
         }
     }
 
-    // Minimum of ENHANCER IN signal
-    if ( noiseGateEnhancerOn ) {
-        enhancerInMinimum = limiter ;
+    // Maximum of ENHANCER OUT signal
+    if ( limiterOn && !enhancerOn ) {
+        enhancerOutMaxLocal = limiter ;
     } else {
-        enhancerInMinimum = 0 ;
-    }
-
-    // If COMPRESSOR on, turn on ENHANCER
-    if ( compressorOn ) {
-        enhancerOn = true ;
+        enhancerOutMaxLocal = analogResolution - 1 ;
     }
 
     // Now, calculate the ENHANCER Gradient
-    enhancerGradient = ( enhancerOutMaxLocal ) / ( enhancerInMaxLocal - enhancerInMinimum ) ;
+    enhancerGradientLocal = ( enhancerOutMaxLocal ) / ( enhancerInMaxLocal - enhancerInMinimum ) ;
+
+    return enhancerGradientLocal ;
+}
+
+// calculate audio settings
+void calculateAudioSettings(){
+
+    // NOISE_GATE_ENHANCER
+    noiseGateEnhancerGradient = getNoiseGateEnhancerGradient() ;
+
+    // ENHANCER
+    enhancerGradient = getEnhancerGradient();
+   
+    // If COMPRESSOR is on, turn on ENHANCER
+    if ( compressorOn ) {
+        enhancerOn = true ;
+    }
 }
 
 
+////////////////
+// AUDIO FUNCTIONS
+////////////////
 
 //  Noise Gate, Compressor and Limiter (on analogSignal)
 float noiseGateCompressorLimiter( int analogLocal ) {
@@ -230,10 +300,8 @@ float noiseGateCompressorLimiter( int analogLocal ) {
 
     // NOISE GATE: with or without dynamic enhancer?
     if ( ( noiseGateEnhancerOn ) && ( analogLocal < compressorKnee ) ) {
-        // with dynamic enhancer
         linearLocal = ( analogLocal - noiseGate ) * noiseGateEnhancerGradient ;
     } else {
-        // without dynamic enhancer
         linearLocal =  analogLocal ; 
     }
 
@@ -254,7 +322,8 @@ float noiseGateCompressorLimiter( int analogLocal ) {
     }
 
     return analogLocal ;
-} ;
+}
+
 
 // ENHANCER, on analogSignal
 float enhancer( float audioLocal ) {
@@ -266,6 +335,10 @@ float enhancer( float audioLocal ) {
   return audioLocal ;
 }
 
+
+////////////////
+// MIDI OUT FUNCTIONS
+////////////////
 
 // Write a MIDI Message
 void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
@@ -279,23 +352,31 @@ void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
         Serial.write( dataLocal1 );
         Serial.write( dataLocal2 );
     }
-} ;
+}
 
+
+////////////////
+// AUDIO IN & AUDIO MANIPULATION FUNCTIONS
+////////////////
 
 // get audio calibrated for MIDI
 int getAnalog( int padLocal ) {
    
-    float audio ;
-    int analogInLocal;
-    int analogOutLocal;
+    float audioLocal     ;
+    int   analogInLocal  ;
+    int   analogOutLocal ;
         
-    analogInLocal  = analogRead( padLocal );;
-    audio          = noiseGateCompressorLimiter( analogInLocal ) ;
-    analogOutLocal = int( enhancer( audio) * analogInToMidiCalibration ) ;
+    analogInLocal  = analogRead( padLocal ) ;
+    audioLocal     = noiseGateCompressorLimiter( analogInLocal ) ;
+    analogOutLocal = int( enhancer( audioLocal ) * analogInToMidiCalibration ) ;
 
     return analogOutLocal ;
 }
 
+
+////////////////
+// HANDLE MIDI IN & OUT FUNCTIONS
+////////////////
 
 // Send Midi ON
 void midiOn()
@@ -308,17 +389,18 @@ void midiOn()
         // Get Analog reading already converted to Midi velocity
         analogOutLocal = getAnalog( pad[i] );
 
-        // disregard negative Values (due to Low Cut Filter noiseGate)
-        if ( ( analogOutLocal > 0 ) && ( analogOutLocal >= padStoreAndHold[i] ) ) {
+        // disregard negative Values (due to Low Cut Filter noiseGate) and check if above decay
+        if ( ( analogOutLocal > 0 ) && ( analogOutLocal >= decayFilter[i] ) ) {
             MIDImessage( noteOn, midiKey[i], analogOutLocal );   // turn note on
             
             sentOn[i] = true ;
-            padStoreAndHold[i] = analogOutLocal ;
+            decayFilter[i] = analogOutLocal ;             // set decay filter
             
             delay( deadTime3 );
         }
     }  
 }
+
 
 // Send Midi Off
 void midiOff()
@@ -335,22 +417,8 @@ void midiOff()
             delay( deadTime3 );
         }
         
-        padStoreAndHold[i]  = int ( releaseFactor * padStoreAndHold[i] ) ;
+        decayFilter[i]  = int ( releaseFactor * decayFilter[i] ) ; // reduce decay Filter value
     }
-}
-
-// Prepare SERIAL Out Baud Rate
-void prepareSerial() {
-
-    long rate ; 
- 
-    if ( DEBUG ) {
-        rate = serialRate ;
-    } else {
-        rate = midiRate ;      
-    }
-    
-    Serial.begin( rate );
 }
 
 
@@ -361,22 +429,17 @@ void prepareSerial() {
 // Arduino SETUP
 void setup()
 {
-    int i;
-
-    // INIT ALL PADs as INPUT
-    for ( i = 0 ; i < padMax ; i++ ) {
-        pinMode( pad[i], INPUT );
-    }
+    // INIT ALL PADs
+    initPads ;
 
     // Prepare Serial
     prepareSerial();
     
     // Check Audio Parameter Configuration
-    if ( !checkIfAudioParaOK() ) {
-        // IF WRONG AUDIO configuration -> dye
-        // AI NvK: Would be better to have a Compiler Error here...
-        exit(1);
-    }
+    checkIfAudioParaOK() ;
+
+    // Calculate Audio Settings
+    calculateAudioSettings() ;
 }
 
 
