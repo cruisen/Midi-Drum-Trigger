@@ -303,12 +303,12 @@ float noiseGateCompressorLimiter( int analogLocal )
     float compressedLocal ;
 
     // NOISE GATE
-    if ( analogLocal <= noiseGate ) {
+    if ( noiseGateOn && analogLocal <= noiseGate ) {
         return 0. ;
     }
 
     // NOISE GATE: with or without dynamic enhancer?
-    if ( ( noiseGateEnhancerOn ) && ( analogLocal < compressorKnee ) ) {
+    if ( noiseGateOn && noiseGateEnhancerOn && ( analogLocal < compressorKnee ) ) {
         linearLocal = ( analogLocal - noiseGate ) * noiseGateEnhancerGradient ;
     } else {
         linearLocal =  analogLocal ; 
@@ -338,11 +338,15 @@ float noiseGateCompressorLimiter( int analogLocal )
 float enhancer( float audioLocal )
 {
   
+  float outLocal ; 
+  
   if ( enhancerOn ) {
-    audioLocal = ( audioLocal - enhancerInMinimum ) * enhancerGradient ;
+    outLocal = ( audioLocal - enhancerInMinimum ) * enhancerGradient ;
+  } else {
+      outLocal = audioLocal ;
   }
   
-  return audioLocal ;
+  return outLocal ;
 }
 
 
