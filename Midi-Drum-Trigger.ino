@@ -25,7 +25,11 @@ bool DEBUG = false ;
 int padMax = 1;
 int pad[] = {A3};        // First element is pad[0] !!!
 byte midiKey[] = {38};   // The Midi Channel for this Pad
-bool sentOn[false] ;     // remember, if sent Midi On
+
+// and some temp arrays for the pads as well
+bool sentOn[] = {false};     // remember, if sent Midi On
+int padStoreAndHold[] = {0}; // individual dynamic pad noise gate
+float releaseFactor = 0.6 ; // dye off factor for dynamic pad noise gate
 
 // Arduino Midi Serial Out Baud Rate
 long midiRate = 115200L;
@@ -226,10 +230,11 @@ void midiOn()
         // Get Analog reading already converted to Midi velocity
         analogOutLocal = getAnalog( pad[i] );
 
-        // disregard negative Values (due to Low Cut Filter noiseGate = 120)
-        if ( analogOutLocal > 0 ) {
+        // disregard negative Values (due to Low Cut Filter noiseGate)
+        if ( ( analogOutLocal > 0 ) AND ( analogOutLocal >= padStoreAndHold[i] ) ) {
             MIDImessage( noteOn, midiKey[i], analogOutLocal );   // turn note on
             sentOn[i] = true ;
+            padStoreAndHold[i] = analogOutLocal ;
             delay( deadTime3 );
         }
     }  
@@ -246,6 +251,7 @@ void midiOff()
             sent[i] = false ;
             delay( deadTime3 );
         }
+        padStoreAndHold[i]  = int ( releaseFactor * padStoreAndHold[i] ) ;
     }
 }
 
