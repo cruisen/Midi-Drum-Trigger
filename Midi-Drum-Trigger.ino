@@ -14,7 +14,7 @@
 // INIT
 ////////////////
 
-bool DEBUG = true ;
+bool DEBUG = false ;
 bool TEST  = true ;
 
 
@@ -48,7 +48,6 @@ long  serialRate        =   9600L ;
 
 
 
-
 ////////////////
 // Calibration
 ////////////////
@@ -79,20 +78,16 @@ int deadTime3 =  0;    // between individual Midi Messages
 
 // Noise Gate & Limiter & Compressor
 bool  noiseGateOn         = false  ;   // if True, NOISE GATE is ON
-bool  decayFilterOn       = false  ;   // if True, DECAY FILTER is ON
+bool  noiseGateEnhancerOn = false  ;   // if True, regain dynamic range lost by NOISE GATE: midiOut [0..noiseGate..(limiter|1023)] ; Noise Gate Enhancer
 bool  compressorOn        = false  ;   // if True, COMPRESSOR is ON, turns also LIMITER ON (with limit=limiter !), so we have a Limiting Compressor
 bool  limiterOn           = false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
-
-bool  noiseGateEnhancerOn = false  ;   // if True, regain dynamic range lost by NOISE GATE: midiOut [0..noiseGate..(limiter|1023)] ; Noise Gate Enhancer
 bool  enhancerOn          = false  ;   // if True, regain dynamic range lost by LIMITER   : midiOut [(0|noiseGate)..1023]          ; Enhancer
+bool  decayFilterOn       = false  ;   // if True, DECAY FILTER is ON
 
 float noiseGate           =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
+float compressorKnee      =   400. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorKnee ) { midiOut = compressor( analogIn) }
+float limiter             =   800. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
 float decayFactor         =     0.5;   // Decay Filter Factor for dynamic pad noise gate
-float compressorKnee      =   600. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorKnee ) { midiOut = compressor( analogIn) }
-float limiter             =   900. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
-
-bool  checkValues         =  true  ;   // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
-                                       // if Check FAILS, send SOS on onboard LED for 100 times !
 
 
 /*
@@ -113,12 +108,6 @@ bool  checkValues         =  true  ;   // if True, check if 0 <= noiseGate <= co
  * Compressor ON :     compressorOn        = true  ;
  * Compressor OFF:     compressorOn        = false ;
  * 
- * Audio Parameter Check:
- * Check ON :           checkValues     = true  ; // WARNING: If this is ON, and above parameters are NOT in Sequence like
- *                                                // 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
- *                                                // then the program will stop, Arduino in endless loop, doing nothing !!!
- * Check OFF:           checkValues     = false ;
- * 
  */
 
 // Global Audio Constants
@@ -134,7 +123,7 @@ float analogInToMidiCalibration ;
 ////////////////
 
 // Debug Function with Name
-void printDebugName( String nameLocal, long valueLocal )
+void printDebugValueNameValue( String nameLocal, long valueLocal )
 {
     if ( DEBUG ) {
        Serial.print( millis()        ); \
@@ -147,7 +136,7 @@ void printDebugName( String nameLocal, long valueLocal )
 }
 
 // Debug Function
-void printDebug( long valueLocal )
+void printDebugValue( long valueLocal )
 {
     if ( DEBUG ) {
        Serial.print( valueLocal, DEC ); \
@@ -178,52 +167,64 @@ void statusLcd()
 {
     lcd.clear() ; // Clear LCD
 
+    // NOISE GATE status
     if ( noiseGateOn ) {
         lcd.print( "N" );
     } else {
         lcd.print( "n" );
     }
     lcd.print( hundredsToHex( noiseGate ) ) ;
-    
+
+    // NOISE GATE ENHANCER status
     if ( noiseGateEnhancerOn ) {
         lcd.print( "E" );
     } else {
         lcd.print( "e" );
     }
-    
-    if ( decayFilterOn ) {
-        lcd.print( "D" );
-    } else {
-        lcd.print( "d" );
-    }
-    lcd.print( hundredsToHex( decayFactor * 1000 ) ) ;
-
+        
+    // COMPRESSOR status
     if ( compressorOn ) {
-        lcd.print( "C" );
-    } else {
-        lcd.print( "c" );
-    }
-    lcd.print( hundredsToHex( compressorKnee ) ) ;
-
-    if ( limiterOn ) {
-        lcd.print( "L" );
-    } else {
-        lcd.print( "l" );
-    }
-    lcd.print( hundredsToHex( limiter ) ) ;
-
-    if ( enhancerOn ) {
-        lcd.print( "E" );
-    } else {
-        lcd.print( "e" );
-    }
-
-    if ( checkValues ) {
         lcd.print( "-C" );
     } else {
         lcd.print( "-c" );
     }
+    lcd.print( hundredsToHex( compressorKnee ) ) ;
+
+    // LIMITER status
+    if ( limiterOn ) {
+        lcd.print( "-L" );
+    } else {
+        lcd.print( "-l" );
+    }
+    lcd.print( hundredsToHex( limiter ) ) ;
+
+    // ENHANCER status
+    if ( enhancerOn ) {
+        lcd.print( "-E" );
+    } else {
+        lcd.print( "-e" );
+    }
+
+    // DECAY FILTER status
+    if ( decayFilterOn ) {
+        lcd.print( "-D" );
+    } else {
+        lcd.print( "-d" );
+    }
+    lcd.print( hundredsToHex( decayFactor * 1000 ) ) ;
 }
+
+
+// LCD Warning
+void lcdWarning()
+{
+    lcd.setCursor(0, 1) ; 
+    lcd.print( "                " ); // Clear second line
+
+    lcd.setCursor(0, 1);
+    lcd.print( "Check Audio Para" );  
+}
+
 
 // print to LCD
 void printLcd( long dataLocal ) {
@@ -231,6 +232,7 @@ void printLcd( long dataLocal ) {
     long analogInOld ;
     long dataLocalOld ;
 
+    // only update LCD, if we have new data
     if ( analogIn != analogInOld || dataLocal != dataLocalOld ) {
         // set the cursor to column 0, line 1
         // (note: line 1 is the second row, since counting begins with 0):
@@ -249,27 +251,20 @@ void printLcd( long dataLocal ) {
 }
 
 
-// SOS LCD
-void sosLcd() {
-    lcd.setCursor(0, 1);
-    lcd.print("STOP: Check PARA");
-}
-
-
 ////////////////
-// SOS FUNCTIONS
+// LED FUNCTIONS
 ////////////////
 
-// SOS SHORT
-void sosS(int delayShortLocal) {
+// LED MORSE SHORT
+void morseShort(int delayShortLocal) {
     digitalWrite(LED_BUILTIN, HIGH) ;
     delay(delayShortLocal) ; 
     digitalWrite(LED_BUILTIN, LOW) ;
     delay(delayShortLocal) ;
 }
 
-// SOS LONG
-void sosL(int delayShortLocal, int delayLongLocal) {
+// LED MORSE LONG
+void morseLong(int delayShortLocal, int delayLongLocal) {
     digitalWrite(LED_BUILTIN, HIGH) ;
     delay(delayLongLocal) ; 
     digitalWrite(LED_BUILTIN, LOW) ;
@@ -277,35 +272,37 @@ void sosL(int delayShortLocal, int delayLongLocal) {
 }
 
 
-// SOS
-void sosLed()
+// Morse SOS vie OnBoard LED
+void ledMorseSOS()
 {
     int delayShortLocal = 300 ;
     int delayLongLocal  = 2 *  delayShortLocal;
 
     int i ;
-
-    sosLcd() ;  // SOS to LCD
     
-    do {       
+    do {
+        // S      
         for ( i = 1 ; i <= 3 ; i++ ) {
-            sosS( delayShortLocal ) ;
+            morseShort( delayShortLocal ) ;
         }
         delay(delayLongLocal) ;
 
+        // O     
         for ( i = 1 ; i <= 3 ; i++ ) {
-            sosL( delayShortLocal, delayLongLocal ) ;
+            morseLong( delayShortLocal, delayLongLocal ) ;
         }
         delay(delayLongLocal) ;
        
+        // S      
         for ( i = 1 ; i <= 3 ; i++ ) {
-            sosS( delayShortLocal ) ;
+            morseShort( delayShortLocal ) ;
         }
         delay(delayLongLocal) ;
 
-        
+        // PAUSE
         delay(delayLongLocal) ;
         delay(delayLongLocal) ;
+    
     } while ( true ) ; // Endless loop !!!
     exit(1);
  }
@@ -320,14 +317,19 @@ void testOutToSerial()
         
         for ( i = 0 ; i < analogResolution ; i++ ) {
             analogOutLocal = analogChain( i );
-            printDebug( long( i ) ) ;
-            printDebug( long( analogOutLocal ) ) ;
+            printDebugValue( long( i ) ) ;
+            printDebugValue( long( analogOutLocal ) ) ;
             Serial.println();
 
         }
     }
+}
 
-    int randNumber = random(10) ;
+// random blink of OnBoard LED, to show code is running
+void ledRandomBusySignal()
+{
+    int randNumber = random(3) ;
+    
     if ( randNumber == 0 ) {
         digitalWrite(LED_BUILTIN, HIGH);
     }
@@ -378,24 +380,21 @@ void prepareSerial()
 // Check Audio Constants
 bool checkIfAudioPara()
 {
-    if ( checkValues ) {
-      
-        // noiseGate Value Check
-        if ( noiseGate > compressorKnee or noiseGate < 0 ) {
-          return false;
-        };
-        
-        // compressorKnee Value Check
-        if ( compressorKnee >= limiter ) {
-          return false;
-        };
-        
-        // limit Value Check
-        if ( limiter > analogResolution - 1 ) {
-          return false;
-        };
+    // noiseGate Value Check
+    if ( noiseGate > compressorKnee or noiseGate < 0 ) {
+      return false;
     };
-
+    
+    // compressorKnee Value Check
+    if ( compressorKnee >= limiter ) {
+      return false;
+    };
+    
+    // limit Value Check
+    if ( limiter > analogResolution - 1 ) {
+      return false;
+    };
+    
     return true;
 }
 
@@ -407,7 +406,8 @@ void checkIfAudioParaOK()
     // AI NvK: Would be better to have a Compiler Error here...
 
     if ( !checkIfAudioPara() ) {
-        sosLed();
+        lcdWarning();
+        ledMorseSOS();
         exit(1);
     }
 }
@@ -481,11 +481,6 @@ void calculateAudioSettings()
     // ENHANCER
     enhancerGradient = getEnhancerGradient();
    
-    // If COMPRESSOR is on, turn on ENHANCER
-    if ( compressorOn ) {
-        enhancerOn = true ;
-    }
-
     // to MIDI Calibration
     analogInToMidiCalibration = ( ( midiResolution - 1 ) / ( analogResolution - 1 ) );
     if ( TEST ) {
@@ -558,7 +553,7 @@ float enhancer( float audioLocal )
 // Write a MIDI Message
 void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 {    
-    printDebug( long( dataLocal2 ) );
+    printDebugValue( long( dataLocal2 ) );
     printLcd(   long( dataLocal2 ) );
     
     if ( !DEBUG ) {
@@ -570,10 +565,10 @@ void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 
 
 ////////////////
-// AUDIO IN & AUDIO MANIPULATION FUNCTIONS
+// AUDIO MANIPULATION FUNCTIONS
 ////////////////
 
-// get audio calibrated for MIDI
+//  apply Audio function and then calibrate for MIDI
 int analogChain( int analogInLocal )
 { 
     float audioLocal     ;
@@ -587,11 +582,11 @@ int analogChain( int analogInLocal )
 
 
 ////////////////
-// HANDLE MIDI IN & OUT FUNCTIONS
+// MIDI NOTE ON & OFF FUNCTIONS
 ////////////////
 
-// Send Midi ON
-void midiOn()
+// Send Midi Note ON
+void sampleAndSendNoteOn()
 {
     int i;
     int analogOutLocal;
@@ -616,8 +611,8 @@ void midiOn()
 }
 
 
-// Send Midi Off
-void midiOff()
+// Send Midi Note Off
+void sendNoteOff()
 {
     int i;
     
@@ -678,11 +673,14 @@ void loop()
 {
     // TEST
     testOutToSerial();
+
+    // OnBoard LED Random blink
+    ledRandomBusySignal() ;
     
-    midiOn();
+    sampleAndSendNoteOn();
     delay( deadTime1 );
     
-    midiOff();
+    sendNoteOff();
     delay( deadTime2 );
 }
 
