@@ -79,6 +79,7 @@ float compressorKnee      =   600. ;   // Compressor on Analog Sample Amplitude:
 float limiter             =   900. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
 
 bool  checkValues         =  true  ;   // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
+                                       // if Check FAILS, send SOS on onboard LED for 100 times !
 
 
 /*
@@ -151,7 +152,7 @@ void SOS()
 
     delay(delayLongLocal) ;
     
-    for ( i = 1 ; i <= 3 ; i++ ) {
+    for ( i = 1 ; i <= 99 ; i++ ) {
         for ( i = 1 ; i <= 3 ; i++ ) {
             digitalWrite(LED_BUILTIN, HIGH);
             delay(delayShortLocal) ;
@@ -176,6 +177,8 @@ void SOS()
         }
         
         delay(delayLongLocal) ;
+        delay(delayLongLocal) ;
+        delay(delayLongLocal) ;
     }
  }
 
@@ -194,6 +197,14 @@ void testOutToSerial()
             Serial.println();
 
         }
+    }
+
+    int randNumber = random(10) ;
+    if ( randNumber == 0 ) {
+        digitalWrite(LED_BUILTIN, HIGH);
+    }
+    if ( randNumber == 1 ) {
+        digitalWrite(LED_BUILTIN, LOW);
     }
 }
 
@@ -400,7 +411,6 @@ float noiseGateCompressorLimiter( int analogLocal )
 // ENHANCER, on analogSignal
 float enhancer( float audioLocal )
 {
-  
   float outLocal ; 
   
   if ( enhancerOn ) {
@@ -440,8 +450,7 @@ void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 
 // get audio calibrated for MIDI
 int analogChain( int analogInLocal )
-{
-   
+{ 
     float audioLocal     ;
     int   analogOutLocal ;
        
@@ -477,7 +486,7 @@ void midiOn()
             
             sentOn[i] = true ;
             decayFilter[i] = analogOutLocal ;             // set decay filter
-            
+
             delay( deadTime3 ) ;
         }
     }  
@@ -495,7 +504,7 @@ void midiOff()
             MIDImessage( noteOff, midiKey[i], 0 ) ;     // turn note off
             
             sentOn[i] = false ;
-            
+
             delay( deadTime3 ) ;
         }
 
@@ -529,7 +538,6 @@ void setup() {
 // Arduino MAIN LOOP
 void loop()
 {
-
     // TEST
     testOutToSerial();
     
