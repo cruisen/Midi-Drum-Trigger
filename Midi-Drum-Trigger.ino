@@ -34,9 +34,9 @@ LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 ////////////////
 
 // Arduino PADs
-int   padMax            =    1    ;
-int   pad[]             = {A3}    ;  // First element is pad[0] !!!
-byte  midiKey[]         = {38}    ;  // The Midi Channel for this Pad
+int const padMax        =    1    ;
+int       pad[]         = {A3}    ;  // First element is pad[0] !!!
+byte      midiKey[]     = {38}    ;  // The Midi Channel for this Pad
 
 // and some temp arrays for the PADs
 bool  sentOn[]          = {false} ;  // remember, if sent Midi On
@@ -77,12 +77,13 @@ int deadTime3 =  0;    // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-bool  noiseGateOn          = true   ;   // if True, NOISE GATE is ON
+bool  noiseGateOn          = false  ;   // if True, NOISE GATE is ON
 bool  compressorOn         = false  ;   // if True, COMPRESSOR is ON, its a Limiting Compressor
-bool  expanderOn           = true   ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
-bool  limiterOn            = true   ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
+bool  expanderOn           = false  ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
+bool  limiterOn            = false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
 
-bool  decayFilterOn        = true   ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
+bool  decayFilterOn        = false  ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
+bool  peakFinderOn         = true   ;   // if True, PEAK FILTER is ON
 
 float noiseGate            =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
 float compressorThreshold  =   400. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorThreshold ) { midiOut = compressor( analogIn) }
@@ -92,7 +93,6 @@ float expanderRatioOverX   =     5. ;   // Expander Ratio 1/X
 float limiter              =   500. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
 
 float decayFactor          =     0.5;   // Decay Filter Factor for dynamic pad noise gate
-
 
 /*
  * USAGE of Audio:
@@ -117,6 +117,8 @@ float decayFactor          =     0.5;   // Decay Filter Factor for dynamic pad n
 // Global Audio Constants
 int analogIn ;
 float analogInToMidiCalibration ;
+int histPointer[ 3 ] = {} ;
+int historyPoint[ 3 ][ padMax ] = {} ;
 
 
 ////////////////
@@ -237,11 +239,10 @@ void lcdWarning()
 // print to LCD
 void printLcd( long dataLocal ) {
 
-    long analogInOld ;
     long dataLocalOld ;
 
     // only update LCD, if we have new data and not every time
-    if ( millis() % 7 == 0 && ( analogIn != analogInOld || dataLocal != dataLocalOld ) ) {
+    if ( millis() % 7 == 0 && dataLocal != 0 && dataLocal != dataLocalOld ) {
         // set the cursor to column 0, line 1
         // (note: line 1 is the second row, since counting begins with 0):
         lcd.setCursor(0, 1) ; 
@@ -253,7 +254,6 @@ void printLcd( long dataLocal ) {
         lcd.setCursor(5, 1);
         lcd.print( dataLocal );
     
-        analogInOld = analogIn ;
         dataLocalOld = dataLocal ;
     }
 }
@@ -532,6 +532,45 @@ int analogChain( int analogInLocal )
 }
 
 
+// Peak Finder
+int peakFinder()
+{
+    int i ;
+    
+    int rise ;
+    int peak ;
+    int fall ;
+
+    int risePoint ;
+    int peakPoint ;
+    int fallPoint ;
+
+    int peekLocal ;
+
+    // calc pointers
+    rise = ( histPointer[i] + 1 ) % 3 ;
+    peak = ( histPointer[i] + 2 ) % 3 ;
+    fall = ( histPointer[i] + 3 ) % 3 ;
+
+    // advance and keep history
+    histPointer[  i ]         = rise ;
+    historyPoint[ i ][ fall ] = analogIn ;
+
+    // name data points
+    risePoint = historyPoint[ i ][ rise ] ;
+    peakPoint = historyPoint[ i ][ peak ] ;
+    fallPoint = historyPoint[ i ][ fall ] ;
+
+    // find Peek
+    if ( risePoint <= peakPoint && peakPoint >= fallPoint ) {
+        peekLocal = peakPoint ;
+    } else {
+        peekLocal = 0 ;
+    }
+
+    return peekLocal ;
+}
+
 ////////////////
 // MIDI NOTE ON & OFF FUNCTIONS
 ////////////////
@@ -541,17 +580,29 @@ void sampleAndSendNoteOn()
 {
     int i;
     int analogOutLocal;
+    int outLocal;
     
     for ( i = 0 ; i < padMax ; i++ ) {
       
         // Get Analog reading already converted to Midi velocity
-        analogIn  = analogRead( pad[i] ) ;
-        analogOutLocal = analogChain( analogIn );
+        analogIn  = analogRead( pad[i] ) ;        
 
-        // disregard negative Values (due to Low Cut Filter noiseGate) and check if above decay
-        if ( ( analogOutLocal > 0 ) && ( !decayFilterOn || ( analogOutLocal >= decayFilter[i] ) ) ) {
+        // Peak Finder
+        if ( peakFinderOn ) {
+            outLocal = analogChain( peakFinder() ) ;
+        } else {
+            analogOutLocal = analogChain( analogIn );
+            if ( decayFilterOn && analogOutLocal > 0  && analogOutLocal >= decayFilter[i] )  {
+                outLocal = analogOutLocal ;
+            } else {
+                outLocal = 0 ;        
+            }
+          }
 
-            MIDImessage( noteOn, midiKey[i], analogOutLocal ) ;   // turn note on
+        // DECAY Filter
+        if ( outLocal > 0 ) {
+
+            MIDImessage( noteOn, midiKey[i], outLocal ) ;   // turn note on
             
             sentOn[i] = true ;
             decayFilter[i] = analogOutLocal ;             // set decay filter
