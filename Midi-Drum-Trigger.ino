@@ -77,12 +77,12 @@ int deadTime3 =  0;    // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-bool  noiseGateOn          = false  ;   // if True, NOISE GATE is ON
+bool  noiseGateOn          = true   ;   // if True, NOISE GATE is ON
 bool  compressorOn         = false  ;   // if True, COMPRESSOR is ON, its a Limiting Compressor
-bool  expanderOn           = false  ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
+bool  expanderOn           = true   ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
 bool  limiterOn            = false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
 
-bool  decayFilterOn        = false  ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
+bool  decayFilterOn        = true   ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
 bool  peakFinderOn         = true   ;   // if True, PEAK FILTER is ON
 
 float noiseGate            =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
@@ -119,6 +119,8 @@ int analogIn ;
 float analogInToMidiCalibration ;
 int histPointer[ 3 ] = {} ;
 int historyPoint[ 3 ][ padMax ] = {} ;
+
+long dataTemp ;
 
 
 ////////////////
@@ -191,30 +193,37 @@ void statusLcd()
        
     // COMPRESSOR status
     if ( compressorOn ) {
-        lcd.print( "-C" );
+        lcd.print( "C" );
     } else {
-        lcd.print( "-c" );
+        lcd.print( "c" );
     }
     lcd.print( hundredsToHex( compressorThreshold ) ) ;
     lcd.print( toHex( compressorRatioOverX ) ) ;
 
     // EXPANDER status
     if ( expanderOn ) {
-        lcd.print( "-E" );
+        lcd.print( "E" );
     } else {
-        lcd.print( "-e" );
+        lcd.print( "e" );
     }
     lcd.print( hundredsToHex( expanderThreshold ) ) ;
     lcd.print( toHex( expanderRatioOverX ) ) ;
 
     // LIMITER status
     if ( limiterOn ) {
-        lcd.print( "-L" );
+        lcd.print( "L" );
     } else {
-        lcd.print( "-l" );
+        lcd.print( "l" );
     }
     lcd.print( hundredsToHex( limiter ) ) ;
 
+    // PEEK FINDER status
+    if ( peakFinderOn ) {
+        lcd.print( "P" );
+    } else {
+        lcd.print( "p" );
+    }
+      
     // DECAY FILTER status
     if ( decayFilterOn ) {
         lcd.print( "-D" );
@@ -239,10 +248,8 @@ void lcdWarning()
 // print to LCD
 void printLcd( long dataLocal ) {
 
-    long dataLocalOld ;
-
     // only update LCD, if we have new data and not every time
-    if ( millis() % 7 == 0 && dataLocal != 0 && dataLocal != dataLocalOld ) {
+    if ( ( ( peakFinderOn && !TEST && !DEBUG ) || millis() % 7 == 0 ) && dataLocal != 0 && dataLocal != dataTemp ) {
         // set the cursor to column 0, line 1
         // (note: line 1 is the second row, since counting begins with 0):
         lcd.setCursor(0, 1) ; 
@@ -254,7 +261,7 @@ void printLcd( long dataLocal ) {
         lcd.setCursor(5, 1);
         lcd.print( dataLocal );
     
-        dataLocalOld = dataLocal ;
+        dataTemp = dataLocal ;
     }
 }
 
@@ -586,18 +593,25 @@ void sampleAndSendNoteOn()
       
         // Get Analog reading already converted to Midi velocity
         analogIn  = analogRead( pad[i] ) ;        
+        analogOutLocal = analogChain( analogIn );
 
-        // Peak Finder
+        // PEAK FINDER
         if ( peakFinderOn ) {
             outLocal = analogChain( peakFinder() ) ;
+            
+            if ( decayFilterOn && analogOutLocal < decayFilter[i] )  {
+                outLocal = 0 ;        
+            }
+
         } else {
-            analogOutLocal = analogChain( analogIn );
-            if ( decayFilterOn && analogOutLocal > 0  && analogOutLocal >= decayFilter[i] )  {
+
+            // DEACY FILTER
+            if ( decayFilterOn && analogOutLocal > 0 && analogOutLocal >= decayFilter[i] )  {
                 outLocal = analogOutLocal ;
             } else {
                 outLocal = 0 ;        
             }
-          }
+        }
 
         // DECAY Filter
         if ( outLocal > 0 ) {
@@ -663,12 +677,11 @@ void setup()
 
     // show Audio Setup
     statusLcd();
-
+    
     // Check Audio Parameter Configuration
     checkIfAudioParaOK() ;
 
 }
-
 
 // Arduino MAIN LOOP
 void loop()
