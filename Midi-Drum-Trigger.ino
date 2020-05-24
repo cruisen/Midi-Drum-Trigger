@@ -77,19 +77,19 @@ int deadTime3 =  0;    // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-bool  noiseGateOn          = false  ;   // if True, NOISE GATE is ON
+bool  noiseGateOn          = true   ;   // if True, NOISE GATE is ON
 bool  compressorOn         = false  ;   // if True, COMPRESSOR is ON, its a Limiting Compressor
-bool  limiterOn            = false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
-bool  expanderOn           = false  ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
+bool  expanderOn           = true   ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
+bool  limiterOn            = true   ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
 
-bool  decayFilterOn        = false  ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
+bool  decayFilterOn        = true   ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
 
 float noiseGate            =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
 float compressorThreshold  =   400. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorThreshold ) { midiOut = compressor( analogIn) }
 float compressorRatioOverX =     5. ;   // Compressor Ratio 1/X
 float expanderThreshold    =   400. ;   // Expander on Analog Sample Amplitude: if ( analogIn <  expanderThreshold ) { midiOut = compressor( analogIn) }
 float expanderRatioOverX   =     5. ;   // Expander Ratio 1/X
-float limiter              =   800. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
+float limiter              =   500. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
 
 float decayFactor          =     0.5;   // Decay Filter Factor for dynamic pad noise gate
 
@@ -116,8 +116,6 @@ float decayFactor          =     0.5;   // Decay Filter Factor for dynamic pad n
 
 // Global Audio Constants
 int analogIn ;
-float expanderGradient ;
-float expanderInMinimum ;
 float analogInToMidiCalibration ;
 
 
@@ -198,14 +196,6 @@ void statusLcd()
     lcd.print( hundredsToHex( compressorThreshold ) ) ;
     lcd.print( toHex( compressorRatioOverX ) ) ;
 
-    // LIMITER status
-    if ( limiterOn ) {
-        lcd.print( "-L" );
-    } else {
-        lcd.print( "-l" );
-    }
-    lcd.print( hundredsToHex( limiter ) ) ;
-
     // EXPANDER status
     if ( expanderOn ) {
         lcd.print( "-E" );
@@ -214,6 +204,14 @@ void statusLcd()
     }
     lcd.print( hundredsToHex( expanderThreshold ) ) ;
     lcd.print( toHex( expanderRatioOverX ) ) ;
+
+    // LIMITER status
+    if ( limiterOn ) {
+        lcd.print( "-L" );
+    } else {
+        lcd.print( "-l" );
+    }
+    lcd.print( hundredsToHex( limiter ) ) ;
 
     // DECAY FILTER status
     if ( decayFilterOn ) {
@@ -485,7 +483,7 @@ float noiseGateCompressorExpanderLimiter( int analogLocal )
     }
 
     // LIMITER (Hard Limiter)
-    if ( limiterOn && analogLocal >= limiter  ) {
+    if ( limiterOn && linearLocal >= limiter  ) {
         linearLocal = limiter ;
     }
 
