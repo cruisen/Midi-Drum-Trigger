@@ -19,6 +19,17 @@ bool TEST  = true ;
 
 
 ////////////////
+// LCD
+////////////////
+
+// include the library code:
+#include <LiquidCrystal.h>
+
+// initialize the library with the numbers of the interface pins
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+
+////////////////
 // Arduino
 ////////////////
 
@@ -34,6 +45,8 @@ int   decayFilter[]     = {0}     ;  // for each pad: dynamic noise gate (decay 
 // Arduino Midi Serial Out Baud Rate
 long  midiRate          = 115200L ;
 long  serialRate        =   9600L ;
+
+
 
 
 ////////////////
@@ -109,6 +122,7 @@ bool  checkValues         =  true  ;   // if True, check if 0 <= noiseGate <= co
  */
 
 // Global Audio Constants
+int analogIn ;
 float noiseGateEnhancerGradient ;
 float enhancerGradient ;
 float enhancerInMinimum ;
@@ -434,7 +448,18 @@ void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
     //printDebugName( "dataLocal1",   long(dataLocal1)   );
     //printDebugName( "dataLocal2",   long(dataLocal2)   );
     
-    printDebug( long(dataLocal2) );
+    printDebug( long( dataLocal2 ) );
+
+    // set the cursor to column 0, line 1
+    // (note: line 1 is the second row, since counting begins with 0):
+    lcd.setCursor(0, 1);
+    lcd.print( "                       " );
+
+    lcd.setCursor(0, 1);
+    lcd.print( analogIn );
+
+    lcd.setCursor(5, 1);
+    lcd.print( dataLocal2 );
     
     if ( !DEBUG ) {
         Serial.write( commandLocal );
@@ -469,15 +494,13 @@ int analogChain( int analogInLocal )
 void midiOn()
 {
     int i;
-    
-    int analogInLocal;
     int analogOutLocal;
     
     for ( i = 0 ; i < padMax ; i++ ) {
       
         // Get Analog reading already converted to Midi velocity
-        analogInLocal  = analogRead( pad[i] ) ;
-        analogOutLocal = analogChain( analogInLocal );
+        analogIn  = analogRead( pad[i] ) ;
+        analogOutLocal = analogChain( analogIn );
 
         // disregard negative Values (due to Low Cut Filter noiseGate) and check if above decay
         if ( ( analogOutLocal > 0 ) && ( !decayFilterOn || ( analogOutLocal >= decayFilter[i] ) ) ) {
@@ -520,7 +543,12 @@ void midiOff()
 ////////////////
 
 // Arduino SETUP
-void setup() {
+void setup() 
+{
+    lcd.begin(16, 2);
+    // Print a message to the LCD.
+    lcd.print("Setup ... ");
+
     // INIT ALL PADs
     initPads() ;
 
@@ -532,6 +560,10 @@ void setup() {
 
     // Calculate Audio Settings
     calculateAudioSettings() ;
+
+    // Print a message to the LCD.
+    lcd.print("Working");
+
 }
 
 
