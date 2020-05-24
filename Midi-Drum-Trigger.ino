@@ -349,7 +349,7 @@ void calculateAudioSettings()
 
     // to MIDI Calibration
     analogInToMidiCalibration = ( ( midiResolution - 1 ) / ( analogResolution - 1 ) );
-    if ( DEBUG ) {
+    if ( TEST ) {
         analogInToMidiCalibration = 1 ;
     }
 }
