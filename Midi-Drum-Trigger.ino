@@ -15,6 +15,7 @@
 ////////////////
 
 bool DEBUG = false ;
+bool TEST  = true ;
 
 
 ////////////////
@@ -64,22 +65,20 @@ int deadTime3 =  0;    // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-bool  noiseGateOn         =  false  ;   // if True, NOISE GATE is ON
+bool  noiseGateOn         =  true  ;   // if True, NOISE GATE is ON
 bool  decayFilterOn       =  true  ;   // if True, DECAY FILTER is ON
-bool  compressorOn        =  false  ;   // if True, COMPRESSOR is ON, turns also LIMITER ON (with limit=limiter !), so we have a Limiting Compressor
-bool  limiterOn           =  false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
+bool  compressorOn        =  true  ;   // if True, COMPRESSOR is ON, turns also LIMITER ON (with limit=limiter !), so we have a Limiting Compressor
+bool  limiterOn           =  true  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
 
 bool  noiseGateEnhancerOn = false  ;   // if True, regain dynamic range lost by NOISE GATE: midiOut [0..noiseGate..(limiter|1023)] ; Noise Gate Enhancer
-bool  enhancerOn          =  false  ;   // if True, regain dynamic range lost by LIMITER   : midiOut [(0|noiseGate)..1023]          ; Enhancer
+bool  enhancerOn          =  true  ;   // if True, regain dynamic range lost by LIMITER   : midiOut [(0|noiseGate)..1023]          ; Enhancer
 
-float noiseGate           =   120. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
+float noiseGate           =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
 float decayFactor         =     0.5;   // Decay Filter Factor for dynamic pad noise gate
-float compressorKnee      =   120. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorKnee ) { midiOut = compressor( analogIn) }
+float compressorKnee      =   600. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorKnee ) { midiOut = compressor( analogIn) }
 float limiter             =   900. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
 
-float compressorSpread    =  10^5  ;   // Logarithmic spread of Compressor
-
-bool  checkValues         = false  ;   // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
+bool  checkValues         =  true  ;   // if True, check if 0 <= noiseGate <= compressorKnee <= limit <= analogResolution - 1 
 
 
 /*
@@ -109,33 +108,93 @@ bool  checkValues         = false  ;   // if True, check if 0 <= noiseGate <= co
  */
 
 // Global Audio Constants
-float analogInToMidiCalibration = ( ( midiResolution - 1 ) / ( analogResolution - 1 ) );
-
 float noiseGateEnhancerGradient ;
 float enhancerGradient ;
 float enhancerInMinimum ;
+float analogInToMidiCalibration ;
+
 
 
 ////////////////
 // HELPER FUNCTIONS
 ////////////////
 
-// Debug Function
-void printDebug( String nameLocal, long valueLocal )
+// Debug Function with Name
+void printDebugName( String nameLocal, long valueLocal )
 {
     if ( DEBUG ) {
        Serial.print( millis()        ); \
-       Serial.print( ': '            ); \
-       Serial.print( __FUNCTION__    ); \
-       Serial.print( '() '           ); \
-       Serial.print( ': '            ); \
-       Serial.print( __LINE__        ); \
-       Serial.print( ': '            ); \
+       Serial.print( ": "            ); \
        Serial.print( nameLocal       ); \
-       Serial.print( ': '            ); \
+       Serial.print( ": "            ); \
        Serial.print( valueLocal, DEC ); \
        Serial.println(               );      
     } ;
+}
+
+// Debug Function
+void printDebug( long valueLocal )
+{
+    if ( DEBUG ) {
+       Serial.print( valueLocal, DEC ); \
+       Serial.println(               );      
+    } ;
+}
+
+// SOS
+void SOS()
+{
+    int delayLongLocal  = 600 ;
+    int delayShortLocal = 300 ;
+
+    int i ;
+
+    delay(delayLongLocal) ;
+    
+    for ( i = 1 ; i <= 3 ; i++ ) {
+        for ( i = 1 ; i <= 3 ; i++ ) {
+            digitalWrite(LED_BUILTIN, HIGH);
+            delay(delayShortLocal) ;
+            digitalWrite(LED_BUILTIN, LOW);
+            delay(delayShortLocal) ;
+        }
+        
+        delay(delayLongLocal) ;
+        for ( i = 1 ; i <= 3 ; i++ ) {
+            digitalWrite(LED_BUILTIN, HIGH);
+            delay(delayLongLocal) ;
+            digitalWrite(LED_BUILTIN, LOW);
+            delay(delayShortLocal) ;
+        }
+        
+        delay(delayLongLocal) ;
+       for ( i = 1 ; i <= 3 ; i++ ) {
+            digitalWrite(LED_BUILTIN, HIGH);
+            delay(delayShortLocal) ;
+            digitalWrite(LED_BUILTIN, LOW);
+            delay(delayShortLocal) ;
+        }
+        
+        delay(delayLongLocal) ;
+    }
+ }
+
+
+// TEST
+void testOutToSerial()
+{
+    if ( DEBUG && TEST ) {
+        int i ;
+        int analogOutLocal ;
+        
+        for ( i = 0 ; i < analogResolution ; i++ ) {
+            analogOutLocal = analogChain( i );
+            printDebug( long( i ) ) ;
+            printDebug( long( analogOutLocal ) ) ;
+            Serial.println();
+
+        }
+    }
 }
 
 
@@ -146,20 +205,21 @@ void printDebug( String nameLocal, long valueLocal )
 // INIT all PADs
 void initPads()
 {
-
       int i;
 
       // INIT ALL PADs as INPUT
       for ( i = 0 ; i < padMax ; i++ ) {
           pinMode( pad[i], INPUT );
       }
+
+      // prepare Builtin LED for DEBUG
+      pinMode(LED_BUILTIN, OUTPUT);
 }
 
 
 // Prepare SERIAL Out Baud Rate
 void prepareSerial()
 {
-
     long rate ; 
  
     if ( DEBUG ) {
@@ -204,19 +264,18 @@ bool checkIfAudioPara()
 // Exit, if not OK
 void checkIfAudioParaOK()
 {
-
     // IF WRONG AUDIO configuration -> dye
     // AI NvK: Would be better to have a Compiler Error here...
 
     if ( !checkIfAudioPara() ) {
+        SOS();
         exit(1);
     }
 }
 
 // get noiseGateEnhancerGradient
 float getNoiseGateEnhancerGradient()
-{
-    
+{   
     float noiseGateEnhancerInMaxLocal ;
     float noiseGateEnhancerGradientLocal ;
 
@@ -252,7 +311,7 @@ float getEnhancerGradient()
 
     // Maximum of ENHANCER IN signal
     if ( compressorOn ) {
-        enhancerInMaxLocal =  log( ( (analogResolution - 1) - compressorKnee ) *  compressorSpread ) + compressorKnee ;      
+        enhancerInMaxLocal =  log( ( (analogResolution - 1) - compressorKnee ) +  1 ) + compressorKnee ;      
     } else {
         if ( limiterOn ) {
             enhancerInMaxLocal = limiter ;
@@ -262,10 +321,10 @@ float getEnhancerGradient()
     }
 
     // Maximum of ENHANCER OUT signal
-    if ( limiterOn && !enhancerOn ) {
-        enhancerOutMaxLocal = limiter ;
-    } else {
+    if ( enhancerOn ) {
         enhancerOutMaxLocal = analogResolution - 1 ;
+    } else {
+        enhancerOutMaxLocal = limiter ;
     }
 
     // Now, calculate the ENHANCER Gradient
@@ -277,7 +336,6 @@ float getEnhancerGradient()
 // calculate audio settings
 void calculateAudioSettings()
 {
-
     // NOISE_GATE_ENHANCER
     noiseGateEnhancerGradient = getNoiseGateEnhancerGradient() ;
 
@@ -287,6 +345,12 @@ void calculateAudioSettings()
     // If COMPRESSOR is on, turn on ENHANCER
     if ( compressorOn ) {
         enhancerOn = true ;
+    }
+
+    // to MIDI Calibration
+    analogInToMidiCalibration = ( ( midiResolution - 1 ) / ( analogResolution - 1 ) );
+    if ( DEBUG ) {
+        analogInToMidiCalibration = 1 ;
     }
 }
 
@@ -298,7 +362,6 @@ void calculateAudioSettings()
 //  Noise Gate, Compressor and Limiter (on analogSignal) [as Waterfall]
 float noiseGateCompressorLimiter( int analogLocal )
 {
-
     float linearLocal ;
     float compressedLocal ;
 
@@ -308,7 +371,7 @@ float noiseGateCompressorLimiter( int analogLocal )
     }
 
     // NOISE GATE: with or without dynamic enhancer?
-    if ( noiseGateOn && noiseGateEnhancerOn && ( analogLocal < compressorKnee ) ) {
+    if ( noiseGateOn && noiseGateEnhancerOn ) {
         linearLocal = ( analogLocal - noiseGate ) * noiseGateEnhancerGradient ;
     } else {
         linearLocal =  analogLocal ; 
@@ -321,7 +384,7 @@ float noiseGateCompressorLimiter( int analogLocal )
 
     // Compressor above the Compressor Knee (and will be enhanced to limiter, or even to analogResolution - 1)
     if ( compressorOn ) {
-        compressedLocal = log( ( analogLocal - compressorKnee ) * compressorSpread + 1 ) + compressorKnee ; 
+        compressedLocal = log( ( analogLocal - compressorKnee ) + 1 ) + compressorKnee ; 
         return compressedLocal ;
     }
 
@@ -330,7 +393,7 @@ float noiseGateCompressorLimiter( int analogLocal )
         return limiter ;
     }
 
-    return analogLocal ;
+    return linearLocal ;
 }
 
 
@@ -341,7 +404,7 @@ float enhancer( float audioLocal )
   float outLocal ; 
   
   if ( enhancerOn ) {
-    outLocal = ( audioLocal - enhancerInMinimum ) * enhancerGradient ;
+      outLocal = ( audioLocal - enhancerInMinimum ) * enhancerGradient ;
   } else {
       outLocal = audioLocal ;
   }
@@ -357,9 +420,11 @@ float enhancer( float audioLocal )
 // Write a MIDI Message
 void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 {
-    printDebug( "commandLocal", long(commandLocal) );
-    printDebug( "dataLocal1",   long(dataLocal1)   );
-    printDebug( "dataLocal2",   long(dataLocal2)   );
+    //printDebugName( "commandLocal", long(commandLocal) );
+    //printDebugName( "dataLocal1",   long(dataLocal1)   );
+    //printDebugName( "dataLocal2",   long(dataLocal2)   );
+    
+    printDebug( long(dataLocal2) );
     
     if ( !DEBUG ) {
         Serial.write( commandLocal );
@@ -374,14 +439,12 @@ void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 ////////////////
 
 // get audio calibrated for MIDI
-int getAnalog( int padLocal )
+int analogChain( int analogInLocal )
 {
    
     float audioLocal     ;
-    int   analogInLocal  ;
     int   analogOutLocal ;
-        
-    analogInLocal  = analogRead( padLocal ) ;
+       
     audioLocal     = noiseGateCompressorLimiter( analogInLocal ) ;
     analogOutLocal = int( enhancer( audioLocal ) * analogInToMidiCalibration ) ;
 
@@ -397,12 +460,15 @@ int getAnalog( int padLocal )
 void midiOn()
 {
     int i;
+    
+    int analogInLocal;
     int analogOutLocal;
     
     for ( i = 0 ; i < padMax ; i++ ) {
       
         // Get Analog reading already converted to Midi velocity
-        analogOutLocal = getAnalog( pad[i] );
+        analogInLocal  = analogRead( pad[i] ) ;
+        analogOutLocal = analogChain( analogInLocal );
 
         // disregard negative Values (due to Low Cut Filter noiseGate) and check if above decay
         if ( ( analogOutLocal > 0 ) && ( !decayFilterOn || ( analogOutLocal >= decayFilter[i] ) ) ) {
@@ -447,7 +513,7 @@ void midiOff()
 // Arduino SETUP
 void setup() {
     // INIT ALL PADs
-    initPads ;
+    initPads() ;
 
     // Prepare Serial
     prepareSerial();
@@ -463,6 +529,10 @@ void setup() {
 // Arduino MAIN LOOP
 void loop()
 {
+
+    // TEST
+    testOutToSerial();
+    
     midiOn();
     delay( deadTime1 );
     
