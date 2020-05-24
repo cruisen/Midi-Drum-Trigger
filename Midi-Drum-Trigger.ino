@@ -14,7 +14,7 @@
 // INIT
 ////////////////
 
-bool DEBUG = true ;
+bool DEBUG = false ;
 bool TEST  = true ;
 
 
@@ -77,7 +77,7 @@ int deadTime3 =  0;    // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-bool  noiseGateOn          = true   ;   // if True, NOISE GATE is ON
+bool  noiseGateOn          = false  ;   // if True, NOISE GATE is ON
 bool  compressorOn         = false  ;   // if True, COMPRESSOR is ON, its a Limiting Compressor
 bool  limiterOn            = false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
 bool  expanderOn           = false  ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
@@ -87,9 +87,9 @@ bool  decayFilterOn        = false  ;   // if True, DECAY FILTER is ON, next Not
 float noiseGate            =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
 float compressorThreshold  =   400. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorThreshold ) { midiOut = compressor( analogIn) }
 float compressorRatioOverX =     5. ;   // Compressor Ratio 1/X
-float limiter              =   800. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
 float expanderThreshold    =   400. ;   // Expander on Analog Sample Amplitude: if ( analogIn <  expanderThreshold ) { midiOut = compressor( analogIn) }
 float expanderRatioOverX   =     5. ;   // Expander Ratio 1/X
+float limiter              =   800. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
 
 float decayFactor          =     0.5;   // Decay Filter Factor for dynamic pad noise gate
 
@@ -411,6 +411,21 @@ bool checkIfAudioPara()
     
     // limit Value Check
     if ( limiter > analogResolution - 1 ) {
+      return false;
+    };
+
+    // compressorRatioOverX  Value Check
+    if ( compressorRatioOverX < 0. || compressorRatioOverX > 16 ) {
+      return false;
+    };
+
+    // expanderRatioOverX  Value Check
+    if ( expanderRatioOverX < 0. || expanderRatioOverX > 16 ) {
+      return false;
+    };
+
+    // decayFactor  Value Check
+    if ( decayFactor <= 0. || decayFactor >= 1 ) {
       return false;
     };
     
