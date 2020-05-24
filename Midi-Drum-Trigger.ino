@@ -14,7 +14,7 @@
 // INIT
 ////////////////
 
-bool DEBUG = false ;
+bool DEBUG = true ;
 bool TEST  = true ;
 
 
@@ -22,7 +22,7 @@ bool TEST  = true ;
 // LCD
 ////////////////
 
-// include the library code:
+// include the LCD library code:
 #include <LiquidCrystal.h>
 
 // initialize the library with the numbers of the interface pins
@@ -78,13 +78,13 @@ int deadTime3 =  0;    // between individual Midi Messages
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-bool  noiseGateOn         =  true  ;   // if True, NOISE GATE is ON
-bool  decayFilterOn       =  true  ;   // if True, DECAY FILTER is ON
-bool  compressorOn        =  true  ;   // if True, COMPRESSOR is ON, turns also LIMITER ON (with limit=limiter !), so we have a Limiting Compressor
-bool  limiterOn           =  true  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
+bool  noiseGateOn         = false  ;   // if True, NOISE GATE is ON
+bool  decayFilterOn       = false  ;   // if True, DECAY FILTER is ON
+bool  compressorOn        = false  ;   // if True, COMPRESSOR is ON, turns also LIMITER ON (with limit=limiter !), so we have a Limiting Compressor
+bool  limiterOn           = false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
 
 bool  noiseGateEnhancerOn = false  ;   // if True, regain dynamic range lost by NOISE GATE: midiOut [0..noiseGate..(limiter|1023)] ; Noise Gate Enhancer
-bool  enhancerOn          =  true  ;   // if True, regain dynamic range lost by LIMITER   : midiOut [(0|noiseGate)..1023]          ; Enhancer
+bool  enhancerOn          = false  ;   // if True, regain dynamic range lost by LIMITER   : midiOut [(0|noiseGate)..1023]          ; Enhancer
 
 float noiseGate           =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
 float decayFactor         =     0.5;   // Decay Filter Factor for dynamic pad noise gate
@@ -129,9 +129,8 @@ float enhancerInMinimum ;
 float analogInToMidiCalibration ;
 
 
-
 ////////////////
-// HELPER FUNCTIONS
+// DEBUG FUNCTIONS
 ////////////////
 
 // Debug Function with Name
@@ -156,44 +155,159 @@ void printDebug( long valueLocal )
     } ;
 }
 
-// SOS
-void SOS()
+
+////////////////
+// LCD FUNCTIONS
+////////////////
+
+// hundreds to HEX
+String hundredsToHex( long longLocal )
 {
-    int delayLongLocal  = 600 ;
+      int hundred ;
+      String stringOut ;
+
+      hundred = int( ( longLocal +50 ) / 100  ) ;
+      stringOut =  String(hundred, HEX) ;
+
+      return stringOut ;
+}
+
+
+// print Status via LCD
+void statusLcd()
+{
+    lcd.clear() ; // Clear LCD
+
+    if ( noiseGateOn ) {
+        lcd.print( "N" );
+    } else {
+        lcd.print( "n" );
+    }
+    lcd.print( hundredsToHex( noiseGate ) ) ;
+    
+    if ( noiseGateEnhancerOn ) {
+        lcd.print( "E" );
+    } else {
+        lcd.print( "e" );
+    }
+    
+    if ( decayFilterOn ) {
+        lcd.print( "D" );
+    } else {
+        lcd.print( "d" );
+    }
+    lcd.print( hundredsToHex( decayFactor * 1000 ) ) ;
+
+    if ( compressorOn ) {
+        lcd.print( "C" );
+    } else {
+        lcd.print( "c" );
+    }
+    lcd.print( hundredsToHex( compressorKnee ) ) ;
+
+    if ( limiterOn ) {
+        lcd.print( "L" );
+    } else {
+        lcd.print( "l" );
+    }
+    lcd.print( hundredsToHex( limiter ) ) ;
+
+    if ( enhancerOn ) {
+        lcd.print( "E" );
+    } else {
+        lcd.print( "e" );
+    }
+
+    if ( checkValues ) {
+        lcd.print( "-C" );
+    } else {
+        lcd.print( "-c" );
+    }
+}
+
+// print to LCD
+void printLcd( long dataLocal ) {
+
+    long analogInOld ;
+    long dataLocalOld ;
+
+    if ( analogIn != analogInOld || dataLocal != dataLocalOld ) {
+        // set the cursor to column 0, line 1
+        // (note: line 1 is the second row, since counting begins with 0):
+        lcd.setCursor(0, 1) ; 
+        lcd.print( "                " ); // Clear second line
+    
+        lcd.setCursor(0, 1);
+        lcd.print( analogIn );
+    
+        lcd.setCursor(5, 1);
+        lcd.print( dataLocal );
+    
+        analogInOld = analogIn ;
+        dataLocalOld = dataLocal ;
+    }
+}
+
+
+// SOS LCD
+void sosLcd() {
+    lcd.setCursor(0, 1);
+    lcd.print("STOP: Check PARA");
+}
+
+
+////////////////
+// SOS FUNCTIONS
+////////////////
+
+// SOS SHORT
+void sosS(int delayShortLocal) {
+    digitalWrite(LED_BUILTIN, HIGH) ;
+    delay(delayShortLocal) ; 
+    digitalWrite(LED_BUILTIN, LOW) ;
+    delay(delayShortLocal) ;
+}
+
+// SOS LONG
+void sosL(int delayShortLocal, int delayLongLocal) {
+    digitalWrite(LED_BUILTIN, HIGH) ;
+    delay(delayLongLocal) ; 
+    digitalWrite(LED_BUILTIN, LOW) ;
+    delay(delayLongLocal) ;
+}
+
+
+// SOS
+void sosLed()
+{
     int delayShortLocal = 300 ;
+    int delayLongLocal  = 2 *  delayShortLocal;
 
     int i ;
 
-    delay(delayLongLocal) ;
+    sosLcd() ;  // SOS to LCD
     
-    for ( i = 1 ; i <= 99 ; i++ ) {
+    do {       
         for ( i = 1 ; i <= 3 ; i++ ) {
-            digitalWrite(LED_BUILTIN, HIGH);
-            delay(delayShortLocal) ;
-            digitalWrite(LED_BUILTIN, LOW);
-            delay(delayShortLocal) ;
+            sosS( delayShortLocal ) ;
         }
-        
         delay(delayLongLocal) ;
+
         for ( i = 1 ; i <= 3 ; i++ ) {
-            digitalWrite(LED_BUILTIN, HIGH);
-            delay(delayLongLocal) ;
-            digitalWrite(LED_BUILTIN, LOW);
-            delay(delayShortLocal) ;
+            sosL( delayShortLocal, delayLongLocal ) ;
         }
-        
         delay(delayLongLocal) ;
-       for ( i = 1 ; i <= 3 ; i++ ) {
-            digitalWrite(LED_BUILTIN, HIGH);
-            delay(delayShortLocal) ;
-            digitalWrite(LED_BUILTIN, LOW);
-            delay(delayShortLocal) ;
+       
+        for ( i = 1 ; i <= 3 ; i++ ) {
+            sosS( delayShortLocal ) ;
         }
+        delay(delayLongLocal) ;
+
         
         delay(delayLongLocal) ;
         delay(delayLongLocal) ;
-        delay(delayLongLocal) ;
-    }
+    } while ( true ) ; // Endless loop !!!
+    exit(1);
  }
 
 
@@ -293,7 +407,7 @@ void checkIfAudioParaOK()
     // AI NvK: Would be better to have a Compiler Error here...
 
     if ( !checkIfAudioPara() ) {
-        SOS();
+        sosLed();
         exit(1);
     }
 }
@@ -443,23 +557,9 @@ float enhancer( float audioLocal )
 
 // Write a MIDI Message
 void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
-{
-    //printDebugName( "commandLocal", long(commandLocal) );
-    //printDebugName( "dataLocal1",   long(dataLocal1)   );
-    //printDebugName( "dataLocal2",   long(dataLocal2)   );
-    
+{    
     printDebug( long( dataLocal2 ) );
-
-    // set the cursor to column 0, line 1
-    // (note: line 1 is the second row, since counting begins with 0):
-    lcd.setCursor(0, 1);
-    lcd.print( "                       " );
-
-    lcd.setCursor(0, 1);
-    lcd.print( analogIn );
-
-    lcd.setCursor(5, 1);
-    lcd.print( dataLocal2 );
+    printLcd(   long( dataLocal2 ) );
     
     if ( !DEBUG ) {
         Serial.write( commandLocal );
@@ -545,9 +645,11 @@ void midiOff()
 // Arduino SETUP
 void setup() 
 {
+    // Setup LCD screen.
     lcd.begin(16, 2);
+    
     // Print a message to the LCD.
-    lcd.print("Setup ... ");
+    lcd.print("Setup... ");
 
     // INIT ALL PADs
     initPads() ;
@@ -555,14 +657,18 @@ void setup()
     // Prepare Serial
     prepareSerial();
     
-    // Check Audio Parameter Configuration
-    checkIfAudioParaOK() ;
-
     // Calculate Audio Settings
     calculateAudioSettings() ;
 
     // Print a message to the LCD.
     lcd.print("Working");
+    delay(1000);
+
+    // show Audio Setup
+    statusLcd();
+
+    // Check Audio Parameter Configuration
+    checkIfAudioParaOK() ;
 
 }
 
