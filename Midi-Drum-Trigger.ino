@@ -1,13 +1,11 @@
 /* CD to Piezo to Midi
  *
- * by: sd-pro
- *
- * Stephan Streichhahn
- *
- * 2020
+ *   Stephan Streichhahn
+ *          &
+ * Nikolai von Krusenstiern
  * 
- * Support by Nikolai von Krusenstiern
- *
+ * Mai 2020
+ * 
  */
 
 ////////////////
@@ -67,7 +65,7 @@ byte noteOn      = 144 + midiChannel;
 byte noteOff     = 128 + midiChannel;
 
 // Dead Times
-int off2OnTime  =   50 ;    // between individual Midi Messages
+int on2OffTime  =   50 ;    // between individual Midi Messages
 int delayShort  =  300 ;    // LCD BLink short
 int delayLong   =  600 ;    // LCD BLink long
 int delayRandom = 1000 ;    // LCD Random Length
@@ -232,6 +230,9 @@ void statusLcd()
         lcd.print( "-d" );
     }
     lcd.print( toHex( decayFactor * 10 ) ) ;
+
+    lcd.setCursor(0, 1);
+    lcd.print( "Nikolai&Stephan" );  
 }
 
 
@@ -643,7 +644,7 @@ void sendNoteOff()
     int i;
     
     for ( i = 0 ; i < padMax ; i++ ) {
-        if (  sentOn[i] > 0 && millis() > sentOn[i] + off2OnTime ) {
+        if (  sentOn[i] > 0 && millis() > sentOn[i] + on2OffTime ) {
             
             MIDImessage( noteOff, midiKey[i], 0 ) ;     // turn note off
             sentOn[i] = 0 ;
