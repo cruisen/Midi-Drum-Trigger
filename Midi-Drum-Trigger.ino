@@ -76,12 +76,12 @@ int delayRandom = 1000 ;    // LCD Random Length
 ////////////////
 
 // Noise Gate & Limiter & Compressor
-bool  noiseGateOn          = true   ;   // if True, NOISE GATE is ON
+bool  noiseGateOn          = false  ;   // if True, NOISE GATE is ON
 bool  compressorOn         = false  ;   // if True, COMPRESSOR is ON, its a Limiting Compressor
 bool  expanderOn           = false  ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
 bool  limiterOn            = false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
 
-bool  decayFilterOn        = true   ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
+bool  decayFilterOn        = false  ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
 bool  peakFinderOn         = true   ;   // if True, PEAK FILTER is ON
 
 float noiseGate            =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
