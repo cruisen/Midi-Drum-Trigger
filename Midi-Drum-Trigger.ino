@@ -1,24 +1,146 @@
-/* CD to Piezo to Midi
+/*   
+ *    
+ *    
+ *    CD to Piezo to Midi
  *
- *   Stephan Streichhahn
- *          &
+ *    Stephan Streichhahn
+ *           &
  * Nikolai von Krusenstiern
  * 
- * Mai 2020
+ *       Mai 2020
+ * 
  * 
  */
 
-////////////////
+
+////////////////////////////////
 // INIT
-////////////////
-
-bool DEBUG = false ;
-bool TEST  = true ;
+////////////////////////////////
 
 
+/*
+ * SET TEST ENVIROMENT
+ */
+
+
+bool const HARDWARETEST       = false  ; // turns OFF everything, pure anlaogIn to midiCalibrated(out) as MIDI
+
+bool TO_SERIAL_MONITOR        = false  ; // print DEBUG Mesages to SERIAL MONITOR
+bool WITH_MILLIS              = false  ; // add millis() to Debug Message
+bool WITH_LINE_NUMBERS        = false  ; // add __LINE__ to Debug Message
+bool FORCE_SERIAL_MONITOR_OUT = false  ; // TO_SERIAL_MONITOR ON and MILLIS and __LINE__ anyway ;-)
+
+// RUN ONLY one (1) of the below (4) TESTs, first one true will be done, others IGNORED. Continue for ever.
+bool TEST_SOS                 = false  ; // Test the OnBoard LED SOS blinking
+
+// if !FORCE_SERIAL_MONITOR_OUT then below (3) TESTs will set: TO_SERIAL_MONITOR = true; WITH_LINE_NUMBERS = false; WITH_MILLIS = false
+bool TEST_AUDIO_CHAIN         = false  ; // Test the noiseGateCompressorExpanderLimiter() FUNCTION:
+                                         // INPUT:  sweep analogIn: from [0.. (analogResolution -1)]
+                                         // OUTPUT: [0.. (analogResolution -1)]
+bool TEST_PEAK_FINDER         = false  ; // Test the peakFinder() FUNCTION:
+                                         // INPUT: random analogIn [0.. (analogResolution -1)]
+                                         // OUTPUT: [0.. (analogResolution -1)]
+bool TEST_DECAY               = false  ; // Test decayFilter mechanism (AI NVK: TBD)
+                                         // INPUT: random analogIn [0.. (analogResolution -1)]
+                                         // OUTPUT: [0.. (analogResolution -1)]
+
+
+/*
+ * SET AUDIO PARAMETERS
+ */
+
+// Noise Gate & Limiter & Compressor
+bool  noiseGateOn           = true  ;   // if True, NOISE GATE is ON
+bool  compressorOn          = false  ;   // if True, COMPRESSOR is ON, its a Limiting Compressor
+bool  expanderOn            = true  ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
+bool  limiterOn             = false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
+
+bool  peakFinderOn          = true  ;   // if True, PEAK FILTER is ON
+bool  decayFilterOn         = false  ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
+
+float noiseGate             =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
+float compressorThreshold   =   400. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorThreshold ) { midiOut = compressor( analogIn) }
+float compressorRatioOverX  =     5. ;   // Compressor Ratio 1/X
+float expanderThreshold     =   400. ;   // Expander on Analog Sample Amplitude: if ( analogIn <  expanderThreshold ) { midiOut = compressor( analogIn) }
+float expanderRatioOverX    =     5. ;   // Expander Ratio 1/X
+float limiter               =   500. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
+
+float decayFactor           =     0.5;   // Decay Filter Factor for dynamic pad noise gate
+
+// Timings, non blocking
+int const onToOffTime       =    50  ;   // between individual Midi Messages
+
+int const morseDotDuration  =   200  ;   // Morse Code DOT
+int const morseDashDuration =   600  ;   // Morse Code DASH ( 3 x DOT)
+
+int const busyDuration      =  1000  ;   // Duration Busy Signal Loop
+int const busySignal        =   200  ;   // Duration Busy Signal
+
+
+/*
+ * SET Arduino PARAMETERS
+ */
+
+// Arduino PADs
+int const     padMax        =    1    ;
+int           pad[]         = {A3}    ;  // First element is pad[0] !!!
+byte          midiKey[]     = {38}    ;  // The Midi Channel for this Pad
+
+// Arduino Midi Serial Out Baud Rate
+long const midiRate         = 115200L ;
+long const serialRate       =   9600L ;
+
+
 ////////////////
-// LCD
+// SET ANALOG to MIDI Calibration
 ////////////////
+
+// Calibration AD to MIDI
+float const analogResolution = 1024. ;  // Analog Digital Amplitude Resolution
+float const midiResolution   =  128. ;  //   Midi Digital Amplitude Resolution
+
+
+/*
+ * SET Midi PARAMETERS
+ */
+
+// Midi Channel & Note On / Off
+byte const midiChannel =   0 ; // 0-15 for 1 to 16
+byte const noteOn      = 144 + midiChannel; 
+byte const noteOff     = 128 + midiChannel;
+
+
+/*
+ * SET & Prepare GLOBAL Audio Variables & Arrays
+ */
+
+// for AUDIO handling
+int analogIn ;
+
+// for PeakFinder
+unsigned int peakPointerLocal      =  0 ;
+unsigned int historyPoint[ 3 ][ padMax ]     = {} ;
+
+// for DECAY FILTER
+unsigned int sentOn[ padMax ]      = {} ;  // remember, when we did sent our Midi On
+float        decayFilter[ padMax ] = {} ;  // for each pad: dynamic noise gate (decay Filter), init ARRAY with "0"
+
+// for ANALOG to MIDI CALIBRATION
+float analogInToMidiCalibration ;
+
+
+/*
+ * SET other GLOBAL Variables
+ */
+
+// for OnBoard LED & LCD
+unsigned int triggerLedMillis ;
+long         dataForLcdTemp   ;
+
+
+/*
+ * LCD INIT
+ */
 
 // include the LCD library code:
 #include <LiquidCrystal.h>
@@ -27,158 +149,218 @@ bool TEST  = true ;
 LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
 
-////////////////
-// Arduino
-////////////////
 
-// Arduino PADs
-int const padMax        =    1    ;
-int       pad[]         = {A3}    ;  // First element is pad[0] !!!
-byte      midiKey[]     = {38}    ;  // The Midi Channel for this Pad
-
-// and some temp arrays for the PADs
-long      sentOn[]      = {}      ;  // remember, when we did sent our Midi On
-float     decayFilter[] = {}      ;  // for each pad: dynamic noise gate (decay Filter), init ARRAY with "0"
-
-// Arduino Midi Serial Out Baud Rate
-long  midiRate          = 115200L ;
-long  serialRate        =   9600L ;
-
-
-
-////////////////
-// Calibration
-////////////////
-
-// Calibration AD to MIDI
-float analogResolution = 1024.;  // Analog Digital Amplitude Resolution
-float midiResolution   =  128.;  //   Midi Digital Amplitude Resolution
-
-
-////////////////
-// Midi
-////////////////
-
-// Midi Channel & Note On / Off
-byte midiChannel =   0 ; // 0-15 for 1 to 16
-byte noteOn      = 144 + midiChannel; 
-byte noteOff     = 128 + midiChannel;
-
-// Dead Times
-int on2OffTime  =   50 ;    // between individual Midi Messages
-int delayShort  =  300 ;    // LCD BLink short
-int delayLong   =  600 ;    // LCD BLink long
-int delayRandom = 1000 ;    // LCD Random Length
-
-
-////////////////
-// AUDIO
-////////////////
-
-// Noise Gate & Limiter & Compressor
-bool  noiseGateOn          = false  ;   // if True, NOISE GATE is ON
-bool  compressorOn         = false  ;   // if True, COMPRESSOR is ON, its a Limiting Compressor
-bool  expanderOn           = false  ;   // if True, regain dynamic range lost by LIMITER and / or COMPRTRESSOR : midiOut [(0|noiseGate)..1023] ; Expander
-bool  limiterOn            = false  ;   // if True, LIMITER    is ON. Without COMPRESSOR ON, this is a hard Limiter 
-
-bool  decayFilterOn        = false  ;   // if True, DECAY FILTER is ON, next Note On, only, if Velocity is decayFactor of current Note On Velocity
-bool  peakFinderOn         = true   ;   // if True, PEAK FILTER is ON
-
-float noiseGate            =   100. ;   // Noise Gate on Analog Sample Amplitude: if ( analogIn <= noiseGate      ) { midiOut = 0 }
-float compressorThreshold  =   400. ;   // Compressor on Analog Sample Amplitude: if ( analogIn >  compressorThreshold ) { midiOut = compressor( analogIn) }
-float compressorRatioOverX =     5. ;   // Compressor Ratio 1/X
-float expanderThreshold    =   400. ;   // Expander on Analog Sample Amplitude: if ( analogIn <  expanderThreshold ) { midiOut = compressor( analogIn) }
-float expanderRatioOverX   =     5. ;   // Expander Ratio 1/X
-float limiter              =   500. ;   // Limiter    on Analog Sample Amplitude: if ( analogIn >= limiter        ) { midiOut = limiter }
-
-float decayFactor          =     0.5;   // Decay Filter Factor for dynamic pad noise gate
+////////////////////////////////
+// FUNCTIONS
+////////////////////////////////
 
 /*
- * USAGE of Audio:
- * 
- * NoiseGate:
- * NoiseGate ON :      noiseGateOn         = true  ;
- * NoiseGate OFF:      noiseGateOn         = false ; 
- *
- * NoiseGate HARD CUT: noiseGateExpanderOn = false ;
- * NoiseGate DYNAMIC : noiseGateExpanderOn = true  ;
- * 
- * Limiter:
- * Limiter ON :        limiterOn           = true  ;
- * Limiter OFF:        limiterOn           = false ; 
- * 
- * Compressor:
- * Compressor ON :     compressorOn        = true  ;
- * Compressor OFF:     compressorOn        = false ;
- * 
+ * Configure Test Enviroment
  */
 
-// Global Audio Constants
-int analogIn ;
-float analogInToMidiCalibration ;
-int histPointer[  3 ]           = {} ;
-int historyPoint[ 3 ][ padMax ] = {} ;
-
-long dataTemp ;
-
-
-////////////////
-// DEBUG FUNCTIONS
-////////////////
-
-// Debug Function with Name
-void printDebugValueNameValue( String nameLocal, long valueLocal )
+void configureTestEnviroment()
 {
-    if ( DEBUG ) {
-       Serial.print( millis()        ); \
-       Serial.print( ": "            ); \
-       Serial.print( nameLocal       ); \
-       Serial.print( ": "            ); \
-       Serial.print( valueLocal, DEC ); \
-       Serial.println(               );      
-    } ;
+    // HARDWARETEST
+    if ( HARDWARETEST ) {
+
+        TO_SERIAL_MONITOR = FORCE_SERIAL_MONITOR_OUT ;
+
+        WITH_LINE_NUMBERS = false ;
+        WITH_MILLIS       = false ;
+
+        TEST_AUDIO_CHAIN  = false ;
+        TEST_PEAK_FINDER  = false ;
+        TEST_DECAY        = false ;
+
+        TEST_SOS          = false ;
+        
+        noiseGateOn       = false ;
+        compressorOn      = false ;
+        expanderOn        = false ;
+        limiterOn         = false ;
+        
+        peakFinderOn      = false ;
+        decayFilterOn     = false ;
+        
+    }
+
+    // Turn on TO_SERIAL_MONITOR for: TEST_AUDIO_CHAIN or TEST_PEAK_FINDER or TEST_DECAY
+    if ( !TEST_SOS && ( TEST_AUDIO_CHAIN || TEST_PEAK_FINDER || TEST_DECAY ) ) {
+        TO_SERIAL_MONITOR     = true  ;
+        if ( !FORCE_SERIAL_MONITOR_OUT ) {
+            WITH_LINE_NUMBERS = false ;
+            WITH_MILLIS       = false ;
+        }
+    }
+
+    // FORCE_SERIAL_MONITOR_OUT
+    if ( FORCE_SERIAL_MONITOR_OUT ) {
+        TO_SERIAL_MONITOR     = true  ;        
+    }
+
+    // TEST_PEAK_FINDER
+    if ( TEST_PEAK_FINDER ) {
+        peakFinderOn = true ;
+    }
+        
+    // TEST_DECAY
+    if ( TEST_DECAY ) {
+       decayFilterOn = true ;
+    }
+    
 }
 
-// Debug Function
-void printDebugValue( long valueLocal )
+
+/*
+ * INIT HARDWARE FUNCTIONS
+ */
+
+// INIT all PADs
+void initPads()
 {
-    if ( DEBUG ) {
-       Serial.print( valueLocal, DEC ); \
-       Serial.println(               );      
-    } ;
+      int i;
+
+      // INIT ALL PADs as INPUT
+      for ( i = 0 ; i < padMax ; i++ ) {
+          pinMode( pad[i], INPUT );
+      }
+
+      // prepare Builtin LED for Status and DEBUG messages
+      pinMode(LED_BUILTIN, OUTPUT);
 }
 
 
-////////////////
-// LCD FUNCTIONS
-////////////////
+// Prepare SERIAL Out Baud Rate
+void prepareSerial()
+{
+    long rate ; 
+ 
+    if ( TO_SERIAL_MONITOR ) {
+        rate = serialRate ;
+    } else {
+        rate = midiRate ;      
+    }
+    
+    Serial.begin( rate );    
+}
+
+
+/*
+ * TO_SERIAL_MONITOR FUNCTIONS
+ */
+
+// add Serial Monito Optinals
+void addSerialOptions( int lineLocal )
+{
+    if ( WITH_MILLIS ) {
+        Serial.print( millis()      ); \
+        Serial.print( ": "          ); \
+    }
+
+    if ( WITH_LINE_NUMBERS ) {
+        Serial.print( lineLocal     ); \
+        Serial.print( ": "          ); \
+    }  
+}
+
+// Print to Serial Monitor with Name and Value
+void printSerialMonitorNameValue( int lineLocal, String nameLocal, long valueLocal )
+{
+    if ( TO_SERIAL_MONITOR && !HARDWARETEST) {
+        addSerialOptions( lineLocal ) ;
+
+        Serial.print( nameLocal       ); \
+        Serial.print( ": "            ); \
+
+        Serial.print( valueLocal, DEC ); \
+        Serial.println(               );      
+    }
+}
+
+// Print to Serial Monitor with Value only
+void printSerialMonitorValue( int lineLocal , long valueLocal )
+{
+    if ( TO_SERIAL_MONITOR ) {
+        addSerialOptions( lineLocal ) ;
+
+        Serial.print( valueLocal, DEC ); \
+        Serial.println(               );      
+    }
+}
+
+// Print to Serial Monitor some Text
+void printSerialMonitorText( int lineLocal , String textLocal )
+{
+    if ( TO_SERIAL_MONITOR ) {
+        addSerialOptions( lineLocal ) ;
+
+        Serial.print( textLocal       ); \
+        Serial.println(               );      
+    }
+}
+
+void printSerialNewLine()
+{
+    if ( TO_SERIAL_MONITOR ) {
+        Serial.println();
+    }
+}
+
+/*
+ * LCD FUNCTIONS
+ */
+
+
+// print to line on LCD
+void printToLineLcd( int lineLocal, String stringLocal )
+{
+    // Clear Line
+    lcd.setCursor(0, lineLocal) ;
+    lcd.print( "                " ) ; // Clear second line
+
+    // Print Line
+    lcd.setCursor(0, lineLocal) ;
+    lcd.print( stringLocal) ; 
+
+    delay(busyDuration) ;
+}
+
+// setup LCD
+void setupLcd()
+{
+    // Setup LCD screen.
+    lcd.begin(16, 2);
+    
+    // Print a message to the LCD
+        printToLineLcd( 0, "Setup... " ) ;
+}
+
+// print COMPLETE on LCD
+void showCompleteOnLcd()
+{
+    // Print a message to the LCD.
+    lcd.print("Ready");
+    delay(morseDashDuration);
+}
 
 // toHex
 String toHex( int intLocal )
 {
-      String stringLocal ;
-
-      stringLocal =  String(intLocal, HEX) ;
-
+      String stringLocal =  String(intLocal, HEX) ;
       return stringLocal ;
-  
 }
 
 // hundreds to HEX
 String hundredsToHex( long longLocal )
 {
-      int hundred ;
-      String stringLocal ;
-
-      hundred = int( ( longLocal +50 ) / 100  ) ;
-      stringLocal = toHex( hundred ) ; 
-      
+      int hundred = int( ( longLocal +50 ) / 100  ) ;
+      String stringLocal = toHex( hundred ) ;
       return stringLocal ;
 }
 
 
 // print Status via LCD
-void statusLcd()
+void showStatusOnLcd()
 {
     lcd.clear() ; // Clear LCD
 
@@ -225,14 +407,50 @@ void statusLcd()
       
     // DECAY FILTER status
     if ( decayFilterOn ) {
-        lcd.print( "-D" );
+        lcd.print( "D" );
     } else {
-        lcd.print( "-d" );
+        lcd.print( "d" );
     }
     lcd.print( toHex( decayFactor * 10 ) ) ;
 
-    lcd.setCursor(0, 1);
-    lcd.print( "Nikolai&Stephan" );  
+     // TO_SERIAL_MONITOR status
+    if ( TO_SERIAL_MONITOR ) {
+        lcd.print( "-M" );
+    } else {
+        lcd.print( "-m" );
+    }
+
+    // HARDWARETEST status
+    if ( HARDWARETEST ) {
+        lcd.print( "H" );
+    } else {
+
+        if ( TEST_SOS ) {
+            lcd.print( "S" );
+        } else {
+
+            if ( TEST_AUDIO_CHAIN ) {
+                lcd.print( "A" );
+
+                TEST_PEAK_FINDER = false ;
+                peakFinderOn     = false ;
+
+            } else {
+            
+                if ( TEST_PEAK_FINDER ) {
+                    lcd.print( "P" );
+                    TEST_DECAY = false ;
+                    decayFilterOn    = false ;
+
+                } else {
+                
+                    if ( TEST_DECAY ) {
+                        lcd.print( "D" );
+                    }
+                }
+            }
+        }        
+    }      
 }
 
 
@@ -243,7 +461,11 @@ void lcdWarning()
     lcd.print( "                " ); // Clear second line
 
     lcd.setCursor(0, 1);
-    lcd.print( "Check Audio Para" );  
+    if ( TEST_SOS ) {
+        lcd.print( "SOS Test" );  
+    } else {
+        lcd.print( "Check Audio Para" );  
+    }
 }
 
 
@@ -251,7 +473,7 @@ void lcdWarning()
 void printLcd( long dataLocal ) {
 
     // only update LCD, if we have new data and not every time
-    if ( ( ( peakFinderOn && !TEST && !DEBUG ) || millis() % 5 == 0 ) && dataLocal != 0 && dataLocal != dataTemp ) {
+    if ( millis() % 5 == 0  && dataLocal != 0 && dataLocal != dataForLcdTemp ) {
 
         // set the cursor to column 0, line 1
         // (note: line 1 is the second row, since counting begins with 0):
@@ -264,141 +486,111 @@ void printLcd( long dataLocal ) {
         lcd.setCursor(5, 1);
         lcd.print( dataLocal );
         
-        dataTemp = dataLocal ;
+        dataForLcdTemp = dataLocal ;
     }
 }
 
 
-////////////////
-// LED FUNCTIONS
-////////////////
+/*
+ * LED FUNCTIONS
+ */
 
 // LED MORSE SHORT
-void morseShort() {
-    digitalWrite(LED_BUILTIN, HIGH) ;
-    delay(delayShort) ; 
-    digitalWrite(LED_BUILTIN, LOW) ;
-    delay(delayShort) ;
+void morseDot() {
+    digitalWrite( LED_BUILTIN, HIGH ) ;
+    delay( morseDotDuration ) ; 
+    digitalWrite(LED_BUILTIN, LOW ) ;
+    delay( morseDotDuration ) ;
 }
 
+
 // LED MORSE LONG
-void morseLong() {
-    digitalWrite(LED_BUILTIN, HIGH) ;
-    delay(delayLong) ; 
-    digitalWrite(LED_BUILTIN, LOW) ;
-    delay(delayLong) ;
+void morseDash() {
+    digitalWrite( LED_BUILTIN, HIGH ) ;
+    delay( morseDashDuration ) ; 
+    digitalWrite( LED_BUILTIN, LOW ) ;
+    delay( morseDotDuration ) ;
+}
+
+
+// send three MORSE items in a row
+void threeMorse( bool dotLocal )
+{
+    int i ;
+    
+    for ( i = 1 ; i <= 3 ; i++ ) {
+        if ( dotLocal ) {
+            morseDot() ;
+        } else {
+            morseDash() ;
+        }
+    }   
+    delay( morseDashDuration - morseDotDuration ) ;
 }
 
 
 // Morse SOS vie OnBoard LED
 void ledMorseSOS()
 {
-    int i ;
-    
     do {
         // S      
-        for ( i = 1 ; i <= 3 ; i++ ) {
-            morseShort() ;
-        }
-        delay(delayLong) ;
+        threeMorse ( true) ;
 
-        // O     
-        for ( i = 1 ; i <= 3 ; i++ ) {
-            morseLong() ;
-        }
-        delay(delayLong) ;
-       
+        // O      
+        threeMorse ( false ) ;
+
         // S      
-        for ( i = 1 ; i <= 3 ; i++ ) {
-            morseShort() ;
-        }
-        delay(delayLong) ;
+        threeMorse ( true ) ;
 
-        // PAUSE
-        delay(delayLong) ;
-        delay(delayLong) ;
+        // PAUSE for next Word
+        delay(morseDashDuration) ;
+        delay(morseDashDuration) ;
     
     } while ( true ) ; // Endless loop !!!
+    
     exit(1);
  }
 
 
-// TEST
-void testOutToSerial()
+// busy blink of OnBoard LED, to show code is running
+void ledBusySignal()
 {
-    if ( DEBUG && TEST ) {
-      
-        int i ;
-        int midiOutLocal ;
-        float audioLocal ;
-        
-        for ( i = 0 ; i < analogResolution ; i++ ) {
+    bool offLocal = digitalRead(LED_BUILTIN) ;  
 
-            analogIn = i ; 
-            
-            audioLocal = noiseGateCompressorExpanderLimiter( analogIn ) ; 
-            midiOutLocal = int( audioLocal * analogInToMidiCalibration ) ;
-            
-            printDebugValue( long( analogIn ) ) ;
-            printDebugValue( long( midiOutLocal ) ) ;
-            Serial.println();
+    if ( millis() >= triggerLedMillis ) {
+        digitalWrite(LED_BUILTIN, !offLocal );
 
-            printLcd( midiOutLocal ) ;
+        if ( offLocal ) {
+            triggerLedMillis += busyDuration - busySignal;
+        } else {
+            triggerLedMillis += busySignal ;
         }
     }
 }
 
-// random blink of OnBoard LED, to show code is running
-void ledRandomBusySignal()
-{
-    int randNumber = random( delayRandom ) ;
-    
-    if ( randNumber == 0 ) {
-        digitalWrite(LED_BUILTIN, HIGH);
+
+/*
+ * INIT AUDIO FUNCTIONS
+ */
+
+// calculate audio settings
+void prepareAudioSettings()
+{   
+    int i ;
+       
+    // init pad array for onToOffTime 
+    for ( i = 0 ; i < padMax ; i++ ) {
+        sentOn[i] = 0 ;
     }
-    if ( randNumber == 1 ) {
-        digitalWrite(LED_BUILTIN, LOW);
-    }
-}
 
-
-////////////////
-// INIT HARDWARE FUNCTIONS
-////////////////
-
-// INIT all PADs
-void initPads()
-{
-      int i;
-
-      // INIT ALL PADs as INPUT
-      for ( i = 0 ; i < padMax ; i++ ) {
-          pinMode( pad[i], INPUT );
-      }
-
-      // prepare Builtin LED for DEBUG
-      pinMode(LED_BUILTIN, OUTPUT);
-}
-
-
-// Prepare SERIAL Out Baud Rate
-void prepareSerial()
-{
-    long rate ; 
+    // to MIDI Calibration
+    analogInToMidiCalibration = ( ( midiResolution - 1 ) / ( analogResolution - 1 ) );
+    //if ( TO_SERIAL_MONITOR ) {
+      //  analogInToMidiCalibration = 1 ;
+    //}
  
-    if ( DEBUG ) {
-        rate = serialRate ;
-    } else {
-        rate = midiRate ;      
-    }
-    
-    Serial.begin( rate );    
 }
 
-
-////////////////
-// INIT AUDIO FUNCTIONS
-////////////////
 
 // Check Audio Constants
 bool checkIfAudioPara()
@@ -445,37 +637,126 @@ bool checkIfAudioPara()
 // Exit, if not OK
 void checkIfAudioParaOK()
 {
-    // IF WRONG AUDIO configuration -> dye
-    // AI NvK: Would be better to have a Compiler Error here...
 
-    if ( !checkIfAudioPara() ) {
+    if ( TEST_SOS || !checkIfAudioPara() ) {
         lcdWarning();
         ledMorseSOS();
         exit(1);
+    } else {
+        printToLineLcd( 1, "Audio Para Check" ) ;
     }
 }
 
 
-// calculate audio settings
-void calculateAudioSettings()
-{   
-    int i ;
-    
-    // to MIDI Calibration
-    analogInToMidiCalibration = ( ( midiResolution - 1 ) / ( analogResolution - 1 ) );
-    if ( DEBUG && TEST ) {
-        analogInToMidiCalibration = 1 ;
-    }
+/*
+ * AUDIO CHAIN TEST FUNCTIONS
+ */
 
-    for ( i = 0 ; i < padMax ; i++ ) {
-        sentOn[i] = 0 ;
+// TEST_AUDIO_CHAIN
+void testAudioChain()
+{
+    if ( TEST_AUDIO_CHAIN && TO_SERIAL_MONITOR ) {
+      
+        int i ;
+        unsigned int midiOutLocal ;
+        float audioLocal ;
+        
+        for ( i = 0 ; i < analogResolution ; i++ ) {
+
+            analogIn = i ; 
+            
+            audioLocal = noiseGateCompressorExpanderLimiter( analogIn ) ; 
+            midiOutLocal = int( audioLocal * analogInToMidiCalibration ) ;
+            
+            printSerialMonitorValue( __LINE__ , long( analogIn ) ) ;
+            printSerialMonitorValue( __LINE__ , long( midiOutLocal ) ) ;
+            printSerialNewLine();
+
+            printLcd( midiOutLocal ) ;
+        }
     }
 }
 
 
-////////////////
-// AUDIO FUNCTIONS
-////////////////
+// TEST_PEAK_FINDER
+void testPeakFinder()
+{
+    if ( TEST_PEAK_FINDER && TO_SERIAL_MONITOR ) {
+
+        int i ;
+        unsigned int analogTestLocal ;
+        unsigned int audioLocal ;
+        
+        for ( i = 0 ; i < analogResolution ; i++ ) {
+          
+            analogTestLocal = i % 10 ;
+            audioLocal  = peakFinder( analogTestLocal, 0 ) * 10 ;
+
+            printSerialMonitorValue( __LINE__ , long( analogTestLocal ) ) ;
+            printSerialMonitorValue( __LINE__ , long( audioLocal ) ) ;
+            printSerialNewLine();
+
+            printLcd( audioLocal ) ;           
+        }
+    }
+}
+
+// TEST_DECAY
+void testDecay()
+{
+    if ( TEST_DECAY && TO_SERIAL_MONITOR ) {
+      
+        int i ;
+        unsigned int analogTestLocal ;
+        unsigned int audioLocal ;
+        
+        for ( i = 0 ; i < analogResolution ; i++ ) {
+          
+            analogTestLocal = random( analogResolution ) ;
+            audioLocal = peakFinderDecayFilter( analogTestLocal, 0 ) ;
+         
+            if ( audioLocal > 0 ) {
+                sendNoteOnOnePad( audioLocal, 0 ) ;
+
+                printSerialMonitorValue( __LINE__ , long( i ) ) ;
+                printSerialMonitorValue( __LINE__ , long( audioLocal ) ) ;
+                printSerialNewLine();
+            }
+            sendNoteOffAllPads();
+            
+            printLcd( audioLocal ) ;
+        }
+    }
+}
+
+
+// do Tests
+void doAudioTests()
+{
+    if ( TEST_AUDIO_CHAIN || TEST_PEAK_FINDER || TEST_DECAY ) {
+      
+        printSerialMonitorText( __LINE__ , "doAudioTests()") ;
+
+        do {
+            // TEST_AUDIO_CHAIN
+            testAudioChain();
+            
+            // TEST_PEAK_FINDER
+            testPeakFinder();
+          
+            // TEST_DECAY
+            testDecay();
+            
+        } while ( true ) ; // ENDLESS LOOP !!!
+        
+        exit(1) ;
+    } 
+}
+
+
+/*
+ * AUDIO CHAIN FUNCTIONS
+ */
 
 //  Noise Gate, Compressor and Limiter (on analogSignal) [as Waterfall]
 float noiseGateCompressorExpanderLimiter( int analogInLocal )
@@ -514,196 +795,213 @@ float noiseGateCompressorExpanderLimiter( int analogInLocal )
 }
 
 
-////////////////
-// MIDI OUT FUNCTIONS
-////////////////
+// Peak Finder
+unsigned int peakFinder( int sampleLocal, int padLocal )
+{    
+    unsigned int peakLocal ;
+
+    // advance pointer
+    peakPointerLocal++ ;
+
+    // calc pointers
+    unsigned int rise = ( peakPointerLocal + 1 ) % 3 ;
+    unsigned int peak = ( peakPointerLocal + 2 ) % 3 ;
+    unsigned int fall = ( peakPointerLocal + 3 ) % 3 ;
+    
+    // overwite oldest with current sample
+    historyPoint[ padLocal ][ fall ] =  sampleLocal ;
+
+    // name data points
+    unsigned int risePoint = historyPoint[ padLocal ][ rise ] ;
+    unsigned int peakPoint = historyPoint[ padLocal ][ peak ] ;
+    unsigned int fallPoint = historyPoint[ padLocal ][ fall ] ;
+
+    // find Peek
+    if ( risePoint < peakPoint && peakPoint > fallPoint ) {
+        peakLocal = peakPoint ;
+    } else {
+        peakLocal = 0 ;
+    }
+
+    return peakLocal ;
+}
+
+
+// peakFinderDecayFilter
+float peakFinderDecayFilter(float audioLocal, int padLocal )
+{
+    unsigned int peakLocal = 0 ;
+    float outLocal = 0 ;
+
+    if ( peakFinderOn ) {
+      
+        // PEAK FINDER      
+        peakLocal = peakFinder( audioLocal, padLocal );    
+        if ( peakLocal > 0 ) {
+
+            // AND DECAY Filter?
+            if ( decayFilterOn && audioLocal < decayFilter[ padLocal ] )  {
+                outLocal = 0 ;        
+            } else {
+                outLocal = noiseGateCompressorExpanderLimiter( peakLocal ) ;                  
+            }
+        }
+        
+    } else {
+
+        // DECAY FILTER
+        if ( !decayFilterOn || audioLocal >= decayFilter[ padLocal ] )  {
+            outLocal = audioLocal ;
+        } else {
+            outLocal = 0 ;        
+        }
+    }
+
+    return outLocal ;
+}
+
+
+/*
+ * MIDI OUT FUNCTIONS
+ */
 
 // Write a MIDI Message
 void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 {    
-    printDebugValue( long( dataLocal2 ) );
+    if ( commandLocal != noteOff ) {
+        printSerialMonitorValue( __LINE__ , long( dataLocal2 ) );
+        printSerialNewLine();  
+    }
+    
     printLcd(   long( dataLocal2 ) );
     
-    if ( !DEBUG ) {
+    if ( !TO_SERIAL_MONITOR ) {
         Serial.write( commandLocal );
-        Serial.write( dataLocal1 );
-        Serial.write( dataLocal2 );
+        Serial.write( dataLocal1   );
+        Serial.write( dataLocal2   );
     }
 }
 
 
-////////////////
-// AUDIO MANIPULATION FUNCTIONS
-////////////////
-
-
-// Peak Finder
-int peakFinder()
-{
-    int i ;
-    
-    int rise ;
-    int peak ;
-    int fall ;
-
-    int risePoint ;
-    int peakPoint ;
-    int fallPoint ;
-
-    int peekLocal ;
-
-    // calc pointers
-    rise = ( histPointer[i] + 1 ) % 3 ;
-    peak = ( histPointer[i] + 2 ) % 3 ;
-    fall = ( histPointer[i] + 3 ) % 3 ;
-
-    // advance and keep history
-    histPointer[  i ]         = rise ;
-    historyPoint[ i ][ fall ] = analogIn ;
-
-    // name data points
-    risePoint = historyPoint[ i ][ rise ] ;
-    peakPoint = historyPoint[ i ][ peak ] ;
-    fallPoint = historyPoint[ i ][ fall ] ;
-
-    // find Peek
-    if ( risePoint < peakPoint && peakPoint > fallPoint ) {
-        peekLocal = peakPoint ;
-    } else {
-        peekLocal = 0 ;
-    }
-
-    return peekLocal ;
-}
-
-////////////////
-// MIDI NOTE ON & OFF FUNCTIONS
-////////////////
-
-// Send Midi Note ON
-void sampleAndSendNoteOn()
+// Sample and Send Midi Note On
+void sampleAllPads()
 {
     int i ;
     
     float audioLocal ;
-    float outLocal ;
-
-    int peakLocal ;
-    int midiOutLocal ;
+    float   outLocal ;
     
     for ( i = 0 ; i < padMax ; i++ ) {
 
-        // If Note is OFF
+        // If Note was OFF
         if ( sentOn[i] == 0 ) {
       
             // Get Analog reading
             analogIn   = analogRead( pad[i] ) ;
             audioLocal = noiseGateCompressorExpanderLimiter( analogIn ) ;
-        
-            // PEAK FINDER
-            if ( peakFinderOn ) {
-              
-                peakLocal = peakFinder();
-              
-                if ( peakLocal > 0 ) {
-                    if ( decayFilterOn && audioLocal < decayFilter[i] )  {
-                        outLocal = 0 ;        
-                    } else {
-                        outLocal = noiseGateCompressorExpanderLimiter( peakLocal ) ;                  
-                    }
-                }
-                
-            } else {
-    
-                // DEACY FILTER
-                if ( decayFilterOn && audioLocal > 0 && audioLocal >= decayFilter[i] )  {
-                    outLocal = audioLocal ;
-                } else {
-                    outLocal = 0 ;        
-                }
-            }
-    
-            // MIDI OUT
-            if ( outLocal > 0 ) {
-              
-                midiOutLocal = int( outLocal * analogInToMidiCalibration ) ;
+            outLocal   = peakFinderDecayFilter( audioLocal, i ) ;
 
-                MIDImessage( noteOn, midiKey[i], midiOutLocal ) ;   // turn note on
-                
-                sentOn[i] = millis() ;
-                decayFilter[i] = outLocal ;             // set decay filter
+            //printSerialMonitorValue( __LINE__ , analogIn ) ;
+                    
+            // Send Note ON
+            if ( outLocal > 0 ) {
+                sendNoteOnOnePad( outLocal, i ) ;
             }
         }
     }  
 }
 
 
+// Send Note ON
+void sendNoteOnOnePad( float outLocal, int padLocal )
+{
+    int midiOutLocal ;
+ 
+    //printSerialMonitorNameValue(__LINE__, "analogInToMidiCalibration", analogInToMidiCalibration ) ;
+    
+    midiOutLocal = int( outLocal * analogInToMidiCalibration ) ;
+
+    MIDImessage( noteOn, midiKey[ padLocal ], midiOutLocal ) ;   // turn note on               
+    sentOn[ padLocal ] = millis() ;
+
+    if ( decayFilterOn ) {
+        decayFilter[ padLocal ] = outLocal ;             // set decay filter
+    }
+} 
+
+
 // Send Midi Note Off
-void sendNoteOff()
+void sendNoteOffAllPads()
 {
     int i;
     
     for ( i = 0 ; i < padMax ; i++ ) {
-        if (  sentOn[i] > 0 && millis() > sentOn[i] + on2OffTime ) {
+        if (  sentOn[i] > 0 && millis() > sentOn[i] + onToOffTime ) {
             
             MIDImessage( noteOff, midiKey[i], 0 ) ;     // turn note off
             sentOn[i] = 0 ;
-
+        
+        } else {
+          
             if ( decayFilterOn ) {
                 decayFilter[i] = decayFactor * decayFilter[i] ; // reduce decay Filter value
             }
         }
-
     }
 }
 
 
-////////////////
+
+////////////////////////////////
 // ARDUINO Setup and Loop
-////////////////
+////////////////////////////////
+
+
 
 // Arduino SETUP
 void setup() 
 {
-    // Setup LCD screen.
-    lcd.begin(16, 2);
+    // configure Test Enviroment
+    configureTestEnviroment() ;
     
-    // Print a message to the LCD.
-    lcd.print("Setup... ");
-
+    // setup LCD
+    setupLcd() ;
+    
     // INIT ALL PADs
     initPads() ;
 
     // Prepare Serial
-    prepareSerial();
+    prepareSerial() ;
     
     // Calculate Audio Settings
-    calculateAudioSettings() ;
+    prepareAudioSettings() ;
 
-    // Print a message to the LCD.
-    lcd.print("Working");
-    delay(delayLong);
+    // Show Complete on LCD
+    showCompleteOnLcd() ;
 
     // show Audio Setup
-    statusLcd();
+    showStatusOnLcd() ;
     
     // Check Audio Parameter Configuration
     checkIfAudioParaOK() ;
+
+    // do Audio Function Tests, if any
+    doAudioTests() ;
+
+    // CopyLeft
+    printToLineLcd( 1, "Nikolai  Stephan" ) ;
 
 }
 
 // Arduino MAIN LOOP
 void loop()
 {
-    // TEST
-    testOutToSerial();
-
-    // OnBoard LED Random blink
-    ledRandomBusySignal() ;
+    // OnBoard LED Busy blink
+    ledBusySignal() ;
 
     // AUDIO
-    sampleAndSendNoteOn();    
-    sendNoteOff();
+    sampleAllPads();    
+    sendNoteOffAllPads();
 }
 
 
