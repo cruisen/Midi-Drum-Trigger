@@ -13,6 +13,29 @@
  */
 
 
+/*
+ * https://github.com/cruisen/Midi-Drum-Trigger
+ * 
+ * https://www.tinkercad.com/things/cPtoKYqtVIB-drum-cd-pad/editel
+ * 
+ * http://sounddesign-pro.com/de/
+ * 
+ * http://nikolai.krusenstiern.de/en/
+ */
+
+
+////////////////////////////////
+// Action Items
+////////////////////////////////
+/*
+ * NvK to implement MODEs
+ * NvK to implement Velocity as LED ON Time [0..1023]
+ * NvK to implement INPUT value functions (sin, saegezahn, random, random walk, ...)
+ * NvK to implement PlayBack of Audio File
+ * SS to send "Audio Text File"
+ * SS to communicate optimized parameters
+ */
+
 ////////////////////////////////
 // INIT
 ////////////////////////////////
@@ -23,23 +46,27 @@
 
 
 // Set MODE Tables and override below Setzings || Individual: Honor below Settings
-char const MODE = "S" ; // S: Standard
+char const MODE = 'S' ; // S: Standard
                         // I: Individual Settings
                         // H: HARDWARETEST
                         // T: TESTSUITE
+                        // R: RECORD to SERIAL MONITOR
+                        // A: "Audio File" playing (is a List of Numbers ;-)
+                    
 
 // Get INPUTS from:
-char INPUTS     = "P" ; // P: Pads
+char INPUTS     = 'P' ; // P: Pads
                         // G: GENERATED
                         // B: BOTH
+                        // A: "Audio File" (is a List of Numbers ;-)
 
 // Outputs to send are:
-char OUTPUTS    = "C" ; // C: Calculated
+char OUTPUTS    = 'C' ; // C: Calculated
                         // I: INPUT
                         // B: BOTH
 
 // Send OUTPUTS to:
-char OUTPUT_TO  = "M" ; // M: Midi
+char OUTPUT_TO  = 'M' ; // M: Midi
                         // S: Serial Monitor
                          
 // LCD USED in Loop:
@@ -51,12 +78,12 @@ bool LCD_IN_LOOP = false ;
  */
 
 
-bool HARDWARETEST             = false  ; // turns OFF everything, pure anlaogIn to midiCalibrated(out) as MIDI
+bool HARDWARETEST             = true  ; // turns OFF everything, pure anlaogIn to midiCalibrated(out) as MIDI
 
-bool TO_SERIAL_MONITOR        = false  ; // print DEBUG Mesages to SERIAL MONITOR
+bool TO_SERIAL_MONITOR        = true  ; // print DEBUG Mesages to SERIAL MONITOR
 bool WITH_MILLIS              = false  ; // add millis() to Debug Message
 bool WITH_LINE_NUMBERS        = false  ; // add __LINE__ to Debug Message
-bool FORCE_SERIAL_MONITOR_OUT = false  ; // TO_SERIAL_MONITOR ON and MILLIS and __LINE__ anyway ;-)
+bool FORCE_SERIAL_MONITOR_OUT = true  ; // TO_SERIAL_MONITOR ON and MILLIS and __LINE__ anyway ;-)
 
 // RUN ONLY one (1) of the below (4) TESTs, first one true will be done, others IGNORED. Continue for ever.
 bool TEST_SOS                 = false  ; // Test the OnBoard LED SOS blinking
@@ -613,9 +640,9 @@ void prepareAudioSettings()
 
     // to MIDI Calibration
     analogInToMidiCalibration = ( ( midiResolution - 1 ) / ( analogResolution - 1 ) );
-    //if ( TO_SERIAL_MONITOR ) {
-      //  analogInToMidiCalibration = 1 ;
-    //}
+    if ( TO_SERIAL_MONITOR ) {
+        analogInToMidiCalibration = 1 ;
+    }
  
 }
 
@@ -897,8 +924,8 @@ float peakFinderDecayFilter(float audioLocal, int padLocal )
 void MIDImessage( byte commandLocal, byte dataLocal1, byte dataLocal2 )
 {    
     if ( commandLocal != noteOff ) {
-        printSerialMonitorValue( __LINE__ , long( dataLocal2 ) );
-        printSerialNewLine();  
+        //printSerialMonitorValue( __LINE__ , long( dataLocal2 ) );
+        //printSerialNewLine();  
     }
     
     printLcd(   long( dataLocal2 ) );
@@ -929,7 +956,7 @@ void sampleAllPads()
             audioLocal = noiseGateCompressorExpanderLimiter( analogIn ) ;
             outLocal   = peakFinderDecayFilter( audioLocal, i ) ;
 
-            //printSerialMonitorValue( __LINE__ , analogIn ) ;
+            printSerialMonitorValue( __LINE__ , analogIn ) ;
                     
             // Send Note ON
             if ( outLocal > 0 ) {
