@@ -5,9 +5,9 @@
  *
  *    Stephan Streichhahn
  *           &
- * Nikolai von Krusenstiern
+ *  Nikolai von Krusenstiern
  * 
- *       Mai 2020
+ *        Mai 2020
  * 
  * 
  */
@@ -17,13 +17,41 @@
 // INIT
 ////////////////////////////////
 
-
 /*
- * SET TEST ENVIROMENT
+ * SET MODES
  */
 
 
-bool const HARDWARETEST       = false  ; // turns OFF everything, pure anlaogIn to midiCalibrated(out) as MIDI
+// Set MODE Tables and override below Setzings || Individual: Honor below Settings
+char const MODE = "S" ; // S: Standard
+                        // I: Individual Settings
+                        // H: HARDWARETEST
+                        // T: TESTSUITE
+
+// Get INPUTS from:
+char INPUTS     = "P" ; // P: Pads
+                        // G: GENERATED
+                        // B: BOTH
+
+// Outputs to send are:
+char OUTPUTS    = "C" ; // C: Calculated
+                        // I: INPUT
+                        // B: BOTH
+
+// Send OUTPUTS to:
+char OUTPUT_TO  = "M" ; // M: Midi
+                        // S: Serial Monitor
+                         
+// LCD USED in Loop:
+bool LCD_IN_LOOP = false ;
+
+
+/*
+ * SET TEST ENVIROMENT, individual
+ */
+
+
+bool HARDWARETEST             = false  ; // turns OFF everything, pure anlaogIn to midiCalibrated(out) as MIDI
 
 bool TO_SERIAL_MONITOR        = false  ; // print DEBUG Mesages to SERIAL MONITOR
 bool WITH_MILLIS              = false  ; // add millis() to Debug Message
